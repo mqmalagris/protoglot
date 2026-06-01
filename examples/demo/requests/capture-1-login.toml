@@ -1,0 +1,13 @@
+name = "Get run id"
+method = "GET"
+url = "{{baseUrl}}/uuid"
+
+[[assertions]]
+type = "status"
+equals = 200
+
+# Pull a value out of the response and stash it in the run scope so later
+# requests in this collection can reference {{runId}} (§10 auth-chaining).
+[[capture]]
+var = "runId"
+jsonpath = "$.uuid"

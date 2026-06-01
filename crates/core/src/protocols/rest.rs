@@ -2,7 +2,7 @@
 
 use crate::environment::{Resolver, Scope};
 use crate::error::{Error, Result};
-use crate::protocols::RawResponse;
+use crate::protocols::{ExecOutcome, RawResponse};
 use protoglot_format::RestRequest;
 use reqwest::Client;
 
@@ -11,7 +11,7 @@ pub async fn execute(
     scope: &Scope,
     client: &Client,
     resolver: &Resolver,
-) -> Result<RawResponse> {
+) -> Result<ExecOutcome> {
     let method_str = resolver.resolve(&req.method, scope).await?;
     let method = reqwest::Method::from_bytes(method_str.trim().to_uppercase().as_bytes())
         .map_err(|e| Error::Request(format!("bad method `{method_str}`: {e}")))?;
@@ -37,23 +37,5 @@ pub async fn execute(
     }
 
     let resp = rb.send().await?;
-    let status = resp.status().as_u16();
-    let content_type = resp
-        .headers()
-        .get(reqwest::header::CONTENT_TYPE)
-        .and_then(|v| v.to_str().ok())
-        .map(str::to_string);
-    let headers = resp
-        .headers()
-        .iter()
-        .map(|(k, v)| (k.as_str().to_string(), v.to_str().unwrap_or_default().to_string()))
-        .collect();
-    let body = resp.bytes().await?.to_vec();
-
-    Ok(RawResponse {
-        status,
-        headers,
-        body,
-        content_type,
-    })
+    Ok(ExecOutcome::ok(RawResponse::from_response(resp).await?))
 }

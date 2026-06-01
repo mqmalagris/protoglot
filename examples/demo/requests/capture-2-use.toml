@@ -1,0 +1,16 @@
+name = "Reuse captured run id"
+method = "GET"
+url = "{{baseUrl}}/headers"
+
+# {{runId}} was captured by capture-1-login.toml earlier in the run.
+[headers]
+X-Run-Id = "{{runId}}"
+
+[[assertions]]
+type = "status"
+equals = 200
+
+[[assertions]]
+type = "jsonpath"
+path = "$.headers['X-Run-Id']"
+exists = true

@@ -76,6 +76,16 @@ impl Request {
             _ => &[],
         }
     }
+
+    /// Declarative captures (§10) declared on this request.
+    pub fn captures(&self) -> &[Capture] {
+        match self {
+            Request::Rest(r) => &r.capture,
+            Request::Graphql(r) => &r.capture,
+            Request::Soap(r) => &r.capture,
+            _ => &[],
+        }
+    }
 }
 
 fn default_method() -> String {

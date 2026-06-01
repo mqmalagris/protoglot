@@ -3,13 +3,13 @@
 
 use crate::environment::{Resolver, Scope};
 use crate::error::{Error, Result};
-use crate::protocols::RawResponse;
+use crate::protocols::ExecOutcome;
 use protoglot_format::GrpcRequest;
 
 pub async fn execute(
     _req: &GrpcRequest,
     _scope: &Scope,
     _resolver: &Resolver,
-) -> Result<RawResponse> {
+) -> Result<ExecOutcome> {
     Err(Error::NotImplemented("grpc"))
 }

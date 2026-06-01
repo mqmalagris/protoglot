@@ -2,9 +2,10 @@
 //! `ExecutionResult`. UI/CLI-agnostic; whoever calls it formats the output.
 
 use crate::assertions;
+use crate::capture;
 use crate::environment::{Resolver, Scope};
 use crate::error::Result;
-use crate::protocols::{self, RawResponse};
+use crate::protocols::{self, ExecOutcome};
 use crate::report::{AssertionOutcome, ExecStatus, ExecutionResult, Protocol, ResponseSummary};
 use protoglot_format::{LoadedRequest, Request};
 use std::time::Instant;
@@ -45,12 +46,25 @@ impl Runner {
         let duration = started.elapsed();
 
         match outcome {
-            Ok(resp) => {
-                let assertions: Vec<AssertionOutcome> = request
+            Ok(ExecOutcome {
+                response,
+                protocol_failure,
+            }) => {
+                let mut assertions: Vec<AssertionOutcome> = request
                     .assertions()
                     .iter()
-                    .map(|a| assertions::evaluate(a, &resp, duration))
+                    .map(|a| assertions::evaluate(a, &response, duration))
                     .collect();
+
+                // Captures run after the response, writing into the shared scope
+                // for subsequent requests in the same run (§10).
+                capture::apply(request.captures(), &response, scope);
+
+                // GraphQL `errors` / SOAP `Fault` flip the result to Failed.
+                if let Some(msg) = protocol_failure {
+                    assertions.push(AssertionOutcome::fail("protocol", msg));
+                }
+
                 let all_ok = assertions.iter().all(|a| a.passed);
                 ExecutionResult {
                     request_name: name,
@@ -62,9 +76,9 @@ impl Runner {
                     },
                     duration,
                     response: Some(ResponseSummary {
-                        status: resp.status,
-                        content_type: resp.content_type.clone(),
-                        size_bytes: resp.body.len(),
+                        status: response.status,
+                        content_type: response.content_type.clone(),
+                        size_bytes: response.body.len(),
                     }),
                     assertions,
                     error: None,
@@ -82,7 +96,7 @@ impl Runner {
         }
     }
 
-    async fn execute(&self, request: &Request, scope: &Scope) -> Result<RawResponse> {
+    async fn execute(&self, request: &Request, scope: &Scope) -> Result<ExecOutcome> {
         match request {
             Request::Rest(r) => {
                 protocols::rest::execute(r, scope, &self.client, &self.resolver).await

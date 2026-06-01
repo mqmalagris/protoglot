@@ -19,6 +19,8 @@ anyhow = "1"
 tokio = { version = "1", features = ["full"] }
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json", "multipart"] }
 serde_json_path = "0.7"
+sxd-document = "0.3"
+sxd-xpath = "0.4"
 regex = "1"
 uuid = { version = "1", features = ["v4"] }
 chrono = { version = "0.4", default-features = false, features = ["clock"] }

@@ -4,7 +4,8 @@
 
 use crate::protocols::RawResponse;
 use crate::report::AssertionOutcome;
-use protoglot_format::Assertion;
+use crate::xml;
+use protoglot_format::{Assertion, VarMap};
 use regex::Regex;
 use serde_json::Value;
 use serde_json_path::JsonPath;
@@ -26,9 +27,12 @@ pub fn evaluate(assertion: &Assertion, resp: &RawResponse, duration: Duration) -
         } => eval_header(resp, name, *exists, equals.as_deref()),
         Assertion::ResponseTime { max_ms } => eval_response_time(duration, *max_ms),
         Assertion::BodyContains { value } => eval_body_contains(resp, value),
-        Assertion::Xpath { .. } => {
-            AssertionOutcome::fail("xpath", "xpath assertions arrive in Phase 2 (SOAP)")
-        }
+        Assertion::Xpath {
+            path,
+            exists,
+            equals,
+            namespaces,
+        } => eval_xpath(resp, path, *exists, equals.as_deref(), namespaces),
     }
 }
 
@@ -158,6 +162,37 @@ fn eval_body_contains(resp: &RawResponse, value: &str) -> AssertionOutcome {
     )
 }
 
+fn eval_xpath(
+    resp: &RawResponse,
+    path: &str,
+    exists: Option<bool>,
+    equals: Option<&str>,
+    namespaces: &VarMap,
+) -> AssertionOutcome {
+    let desc = format!("xpath {path}");
+    let result = match xml::eval_xpath(&resp.text(), path, namespaces) {
+        Ok(r) => r,
+        Err(e) => return AssertionOutcome::fail(desc, e),
+    };
+
+    if exists == Some(false) {
+        return judge(desc, !result.exists, "expected no match");
+    }
+    if exists == Some(true) || (exists.is_none() && equals.is_none()) {
+        if !result.exists {
+            return AssertionOutcome::fail(desc, "expected a match, found none");
+        }
+    }
+    if let Some(expected) = equals {
+        return judge(
+            desc,
+            result.string == expected,
+            format!("expected `{expected}`, got `{}`", result.string),
+        );
+    }
+    AssertionOutcome::pass(desc)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -217,5 +252,29 @@ mod tests {
         assert!(!eval_body_contains(&r, "nope").passed);
         assert!(eval_response_time(Duration::from_millis(50), 100).passed);
         assert!(!eval_response_time(Duration::from_millis(150), 100).passed);
+    }
+
+    #[test]
+    fn xpath_plain_and_equals() {
+        let r = resp(200, "<root><rate>3.5</rate></root>", "text/xml");
+        assert!(eval_xpath(&r, "//rate", Some(true), None, &VarMap::new()).passed);
+        assert!(eval_xpath(&r, "//rate", None, Some("3.5"), &VarMap::new()).passed);
+        assert!(!eval_xpath(&r, "//rate", None, Some("9.9"), &VarMap::new()).passed);
+        assert!(!eval_xpath(&r, "//missing", Some(true), None, &VarMap::new()).passed);
+    }
+
+    #[test]
+    fn xpath_with_namespaces() {
+        let r = resp(
+            200,
+            r#"<r:root xmlns:r="urn:x"><r:rate>3.5</r:rate></r:root>"#,
+            "text/xml",
+        );
+        // unregistered prefix -> no match
+        assert!(!eval_xpath(&r, "//x:rate", Some(true), None, &VarMap::new()).passed);
+        // registered prefix -> match
+        let mut ns = VarMap::new();
+        ns.insert("x".into(), "urn:x".into());
+        assert!(eval_xpath(&r, "//x:rate", Some(true), None, &ns).passed);
     }
 }

@@ -3,12 +3,14 @@
 //! (the **core-first** principle, §2).
 
 pub mod assertions;
+pub mod capture;
 pub mod environment;
 pub mod error;
 pub mod protocols;
 pub mod report;
 pub mod runner;
 pub mod secrets;
+pub mod xml;
 
 pub use error::{Error, Result};
 pub use report::{ExecStatus, ExecutionResult, Protocol, Reporter};
