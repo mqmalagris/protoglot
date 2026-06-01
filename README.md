@@ -19,6 +19,9 @@ See [`protoglot-spec.md`](./protoglot-spec.md) for the full design.
   reusing the REST/HTTP layer (Phase 2).
 - **`[[capture]]`** — pull a value (jsonpath/xpath) from a response into the run
   scope for later requests; covers auth-chaining without a JS engine (Phase 2).
+- **Auth** (Phase 3): `bearer`, `basic`, `oauth2_client_credentials` (header
+  schemes, any HTTP protocol), `aws_sigv4` request signing and `mtls` client
+  certs (REST). OAuth2 authorization-code + PKCE is the remaining follow-up.
 
 gRPC, WebSocket, JS scripting, and the desktop app are **stubs / not yet built**
 — see the roadmap (§11) in the spec.
@@ -52,6 +55,36 @@ path = "//t:GetRateResult"
 exists = true
 [assertions.namespaces]      # prefixes must be registered or the query won't match
 t = "http://tempuri.org/"
+```
+
+### Auth (Phase 3)
+
+```toml
+[auth]
+type = "bearer"
+token = "{{$secret:api_token}}"
+```
+```toml
+[auth]
+type = "oauth2_client_credentials"
+token_url = "{{idp}}/oauth/token"
+client_id = "{{clientId}}"
+client_secret = "{{$secret:client_secret}}"
+scopes = ["api.read", "api.write"]
+```
+```toml
+[auth]
+type = "aws_sigv4"
+access_key_id = "{{AWS_ACCESS_KEY_ID}}"
+secret_access_key = "{{$secret:aws_secret}}"
+region = "us-east-1"
+service = "execute-api"
+# session_token = "{{AWS_SESSION_TOKEN}}"   # optional
+```
+```toml
+[auth]
+type = "mtls"
+pem = "./client-bundle.pem"   # or: cert = "...", key = "..."
 ```
 
 ## Workspace

@@ -20,6 +20,8 @@ tokio = { version = "1", features = ["full"] }
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json", "multipart"] }
 serde_json_path = "0.7"
 base64 = "0.22"
+aws-sigv4 = "1"
+aws-credential-types = "1"
 sxd-document = "0.3"
 sxd-xpath = "0.4"
 regex = "1"

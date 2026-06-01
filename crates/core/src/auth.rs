@@ -203,6 +203,57 @@ pub fn build_mtls_client(material: &MtlsMaterial) -> Result<Client> {
         .map_err(Error::from)
 }
 
+/// Compute the AWS SigV4 headers (`Authorization`, `x-amz-date`, and
+/// `x-amz-security-token` when a session token is present) for the given
+/// request. `uri` must already include the final query string. Returns the
+/// header (name, value) pairs to add to the outgoing request.
+pub fn sign_aws(
+    material: &Sigv4Material,
+    method: &str,
+    uri: &str,
+    headers: &[(String, String)],
+    body: &[u8],
+) -> Result<Vec<(String, String)>> {
+    use aws_credential_types::Credentials;
+    use aws_sigv4::http_request::{
+        sign, SignableBody, SignableRequest, SigningParams, SigningSettings,
+    };
+    use aws_sigv4::sign::v4;
+    use std::time::SystemTime;
+
+    let credentials = Credentials::new(
+        material.access_key_id.clone(),
+        material.secret_access_key.clone(),
+        material.session_token.clone(),
+        None,
+        "protoglot",
+    );
+    let identity = credentials.into();
+
+    let params = v4::SigningParams::builder()
+        .identity(&identity)
+        .region(&material.region)
+        .name(&material.service)
+        .time(SystemTime::now())
+        .settings(SigningSettings::default())
+        .build()
+        .map_err(|e| Error::Auth(format!("sigv4 params: {e}")))?;
+    let signing_params: SigningParams = params.into();
+
+    let header_iter = headers.iter().map(|(k, v)| (k.as_str(), v.as_str()));
+    let signable = SignableRequest::new(method, uri, header_iter, SignableBody::Bytes(body))
+        .map_err(|e| Error::Auth(format!("sigv4 signable request: {e}")))?;
+
+    let (instructions, _signature) = sign(signable, &signing_params)
+        .map_err(|e| Error::Auth(format!("sigv4 signing: {e}")))?
+        .into_parts();
+
+    Ok(instructions
+        .headers()
+        .map(|(name, value)| (name.to_string(), value.to_string()))
+        .collect())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
