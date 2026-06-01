@@ -1,0 +1,17 @@
+/target
+**/*.rs.bk
+Cargo.lock.orig
+
+# Tauri / node (desktop, scaffolded later)
+desktop/node_modules
+desktop/dist
+desktop/src-tauri/target
+
+# secrets must never land in git
+*.secret
+.env
+
+# local editor/agent settings
+.claude/settings.local.json
+
+protoglot-spec.md

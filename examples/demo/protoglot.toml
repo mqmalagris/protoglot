@@ -1,0 +1,5 @@
+name = "demo"
+
+# Collection-scoped variables (lowest precedence; --var and --env override).
+[variables]
+baseUrl = "https://httpbin.org"

@@ -1,0 +1,36 @@
+[workspace]
+resolver = "2"
+members = ["crates/format", "crates/core", "crates/cli"]
+
+[workspace.package]
+version = "0.0.1"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/matheusmalagris/protoglot"
+description = "Local-first, git-friendly multiprotocol API client"
+
+[workspace.dependencies]
+# shared external deps (single source of versions)
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+toml = "0.8"
+thiserror = "2"
+anyhow = "1"
+tokio = { version = "1", features = ["full"] }
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json", "multipart"] }
+serde_json_path = "0.7"
+regex = "1"
+uuid = { version = "1", features = ["v4"] }
+chrono = { version = "0.4", default-features = false, features = ["clock"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+clap = { version = "4", features = ["derive"] }
+owo-colors = "4"
+
+# internal crates
+protoglot-format = { path = "crates/format" }
+protoglot-core = { path = "crates/core" }
+
+[profile.release]
+strip = true
+lto = "thin"

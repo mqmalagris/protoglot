@@ -1,0 +1,21 @@
+name = "Get JSON"
+method = "GET"
+url = "{{baseUrl}}/json"
+
+[[assertions]]
+type = "status"
+equals = 200
+
+[[assertions]]
+type = "header"
+name = "content-type"
+equals = "application/json"
+
+[[assertions]]
+type = "jsonpath"
+path = "$.slideshow.title"
+exists = true
+
+[[assertions]]
+type = "response_time"
+max_ms = 5000

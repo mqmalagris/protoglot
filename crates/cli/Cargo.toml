@@ -1,0 +1,18 @@
+[package]
+name = "protoglot-cli"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "protoglot command-line interface"
+
+[[bin]]
+name = "protoglot"
+path = "src/main.rs"
+
+[dependencies]
+protoglot-core.workspace = true
+clap.workspace = true
+tokio.workspace = true
+anyhow.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true

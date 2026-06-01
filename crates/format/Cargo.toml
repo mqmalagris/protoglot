@@ -1,0 +1,16 @@
+[package]
+name = "protoglot-format"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "On-disk collection format (parse/serialize) for protoglot"
+
+[lib]
+name = "protoglot_format"
+path = "src/lib.rs"
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+toml.workspace = true
+thiserror.workspace = true
