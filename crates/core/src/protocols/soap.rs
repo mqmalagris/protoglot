@@ -3,8 +3,9 @@
 //! switches to `application/soap+xml`. A `<Fault>` in the response (any
 //! namespace prefix) is a protocol-level failure.
 
+use crate::auth::{self, AppliedAuth};
 use crate::environment::{Resolver, Scope};
-use crate::error::Result;
+use crate::error::{Error, Result};
 use crate::protocols::{ExecOutcome, RawResponse};
 use crate::xml;
 use protoglot_format::SoapRequest;
@@ -24,6 +25,13 @@ pub async fn execute(
         _ => "text/xml; charset=utf-8",
     };
 
+    let applied = auth::prepare(&req.auth, scope, resolver, client).await?;
+    if matches!(applied, AppliedAuth::Sigv4(_) | AppliedAuth::Mtls(_)) {
+        return Err(Error::Auth(
+            "aws_sigv4 / mtls auth is only supported on REST requests".into(),
+        ));
+    }
+
     let mut rb = client
         .post(&url)
         .header(reqwest::header::CONTENT_TYPE, content_type)
@@ -34,9 +42,14 @@ pub async fn execute(
         let action = resolver.resolve(action, scope).await?;
         rb = rb.header("SOAPAction", format!("\"{action}\""));
     }
+
+    let mut headers: Vec<(String, String)> = Vec::with_capacity(req.headers.len() + 1);
     for (name, value) in &req.headers {
-        let value = resolver.resolve(value, scope).await?;
-        rb = rb.header(name.as_str(), value);
+        headers.push((name.clone(), resolver.resolve(value, scope).await?));
+    }
+    auth::merge_header(&mut headers, &applied);
+    for (name, value) in &headers {
+        rb = rb.header(name.as_str(), value.clone());
     }
 
     let resp = rb.send().await?;
@@ -68,6 +81,7 @@ mod tests {
             headers: Default::default(),
             assertions: vec![],
             capture: vec![],
+            auth: None,
         }
     }
 

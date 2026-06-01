@@ -11,6 +11,9 @@ pub enum Error {
     #[error("invalid method or url: {0}")]
     Request(String),
 
+    #[error("auth error: {0}")]
+    Auth(String),
+
     #[error("template resolution failed: {0}")]
     Template(String),
 

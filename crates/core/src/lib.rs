@@ -3,6 +3,7 @@
 //! (the **core-first** principle, §2).
 
 pub mod assertions;
+pub mod auth;
 pub mod capture;
 pub mod environment;
 pub mod error;

@@ -2,8 +2,9 @@
 //! reusing the REST headers + variable resolution. A non-empty `errors` field
 //! in the JSON response is a protocol-level failure even on HTTP 200 (§spec F2).
 
+use crate::auth::{self, AppliedAuth};
 use crate::environment::{Resolver, Scope};
-use crate::error::Result;
+use crate::error::{Error, Result};
 use crate::protocols::{ExecOutcome, RawResponse};
 use protoglot_format::GraphqlRequest;
 use reqwest::Client;
@@ -35,10 +36,22 @@ pub async fn execute(
         );
     }
 
-    let mut rb = client.post(&url).json(&Value::Object(body));
+    let applied = auth::prepare(&req.auth, scope, resolver, client).await?;
+    if matches!(applied, AppliedAuth::Sigv4(_) | AppliedAuth::Mtls(_)) {
+        return Err(Error::Auth(
+            "aws_sigv4 / mtls auth is only supported on REST requests".into(),
+        ));
+    }
+
+    let mut headers: Vec<(String, String)> = Vec::with_capacity(req.headers.len() + 1);
     for (name, value) in &req.headers {
-        let value = resolver.resolve(value, scope).await?;
-        rb = rb.header(name.as_str(), value);
+        headers.push((name.clone(), resolver.resolve(value, scope).await?));
+    }
+    auth::merge_header(&mut headers, &applied);
+
+    let mut rb = client.post(&url).json(&Value::Object(body));
+    for (name, value) in &headers {
+        rb = rb.header(name.as_str(), value.clone());
     }
 
     let resp = rb.send().await?;
@@ -96,6 +109,7 @@ mod tests {
             headers: Default::default(),
             assertions: vec![],
             capture: vec![],
+            auth: None,
         }
     }
 

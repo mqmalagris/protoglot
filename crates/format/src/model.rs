@@ -108,6 +108,8 @@ pub struct RestRequest {
     pub assertions: Vec<Assertion>,
     #[serde(default)]
     pub capture: Vec<Capture>,
+    #[serde(default)]
+    pub auth: Option<Auth>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -125,6 +127,8 @@ pub struct GraphqlRequest {
     pub assertions: Vec<Assertion>,
     #[serde(default)]
     pub capture: Vec<Capture>,
+    #[serde(default)]
+    pub auth: Option<Auth>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -174,6 +178,50 @@ pub struct SoapRequest {
     pub assertions: Vec<Assertion>,
     #[serde(default)]
     pub capture: Vec<Capture>,
+    #[serde(default)]
+    pub auth: Option<Auth>,
+}
+
+/// Authentication for a request. Header-style schemes (`bearer`, `basic`,
+/// `oauth2_client_credentials`) work on any HTTP protocol; `aws_sigv4` and
+/// `mtls` apply to REST. The engine that applies these lives in `core`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum Auth {
+    Bearer {
+        token: String,
+    },
+    Basic {
+        username: String,
+        password: String,
+    },
+    Oauth2ClientCredentials {
+        token_url: String,
+        client_id: String,
+        client_secret: String,
+        #[serde(default)]
+        scopes: Vec<String>,
+        #[serde(default)]
+        audience: Option<String>,
+    },
+    AwsSigv4 {
+        access_key_id: String,
+        secret_access_key: String,
+        #[serde(default)]
+        session_token: Option<String>,
+        region: String,
+        service: String,
+    },
+    /// Mutual TLS. Provide either a combined `pem` (cert + private key) or both
+    /// `cert` and `key` paths.
+    Mtls {
+        #[serde(default)]
+        cert: Option<String>,
+        #[serde(default)]
+        key: Option<String>,
+        #[serde(default)]
+        pem: Option<String>,
+    },
 }
 
 /// A declarative assertion. The engine that evaluates these lives in `core`.
