@@ -27,8 +27,9 @@ source and results on the right.
 - **egui chosen over Tauri+Svelte and Slint** (see project DEFERRED notes):
   devtool sweet spot, 100% Rust, MIT/Apache license match, simplest async wiring.
 - **Editable source + save-back** — edit a request's TOML in place and **Save**
-  writes it back to disk (row name refreshes). Switching requests discards
-  unsaved edits.
+  (or **Ctrl/Cmd+S**) writes it back to disk (row name refreshes). Switching
+  requests or closing the window with unsaved edits prompts (Save / Discard /
+  Cancel) instead of dropping them.
 - **TOML syntax highlighting** — a small dependency-free highlighter
   (`src/highlight.rs`): comments, strings (incl. multi-line `"""`), `[sections]`,
   keys. No syntect/onig (cross-compile clean). TOML-only for now.

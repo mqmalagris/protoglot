@@ -22,6 +22,20 @@ struct RequestRow {
     path: PathBuf,
 }
 
+/// A pending action blocked by unsaved edits.
+#[derive(Clone, Copy)]
+enum Pending {
+    Switch(usize),
+    Quit,
+}
+
+#[derive(Clone, Copy)]
+enum Decision {
+    Save,
+    Discard,
+    Cancel,
+}
+
 struct App {
     rt: tokio::runtime::Runtime,
     path: String,
@@ -31,6 +45,7 @@ struct App {
     selected: Option<usize>,
     source: String,
     dirty: bool,
+    pending: Option<Pending>,
     status: String,
     running: bool,
     rx: Option<Receiver<Vec<ExecutionResult>>>,
@@ -51,6 +66,7 @@ impl App {
             selected: None,
             source: String::new(),
             dirty: false,
+            pending: None,
             status: String::new(),
             running: false,
             rx: None,
@@ -102,6 +118,69 @@ impl App {
                 self.status = format!("saved {}", path.display());
             }
             Err(e) => self.status = format!("save failed: {e}"),
+        }
+    }
+
+    /// Open `idx`, but if the current request has unsaved edits, defer to a
+    /// confirmation dialog instead of silently dropping them.
+    fn request_open(&mut self, idx: usize) {
+        if self.pending.is_some() {
+            return; // a dialog is already up
+        }
+        if self.dirty && self.selected.is_some() && self.selected != Some(idx) {
+            self.pending = Some(Pending::Switch(idx));
+        } else {
+            self.open(idx);
+        }
+    }
+
+    /// Render the unsaved-changes dialog when an action is pending, and act on
+    /// the user's choice.
+    fn show_guard(&mut self, ctx: &egui::Context) {
+        let Some(pending) = self.pending else { return };
+        let mut decision: Option<Decision> = None;
+
+        egui::Window::new("Unsaved changes")
+            .collapsible(false)
+            .resizable(false)
+            .anchor(egui::Align2::CENTER_CENTER, egui::Vec2::ZERO)
+            .show(ctx, |ui| {
+                ui.label("This request has unsaved edits.");
+                ui.add_space(8.0);
+                let (save_label, discard_label) = match pending {
+                    Pending::Switch(_) => ("Save & switch", "Discard"),
+                    Pending::Quit => ("Save & quit", "Discard & quit"),
+                };
+                ui.horizontal(|ui| {
+                    if ui.button(save_label).clicked() {
+                        decision = Some(Decision::Save);
+                    }
+                    if ui.button(discard_label).clicked() {
+                        decision = Some(Decision::Discard);
+                    }
+                    if ui.button("Cancel").clicked() {
+                        decision = Some(Decision::Cancel);
+                    }
+                });
+            });
+
+        let Some(decision) = decision else { return };
+        self.pending = None;
+        match (decision, pending) {
+            (Decision::Cancel, _) => {}
+            (Decision::Save, Pending::Switch(idx)) => {
+                self.save();
+                self.open(idx);
+            }
+            (Decision::Discard, Pending::Switch(idx)) => self.open(idx),
+            (Decision::Save, Pending::Quit) => {
+                self.save();
+                ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+            }
+            (Decision::Discard, Pending::Quit) => {
+                self.dirty = false;
+                ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+            }
         }
     }
 
@@ -185,6 +264,20 @@ impl eframe::App for App {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         self.poll();
 
+        // Ctrl/Cmd+S saves the current request.
+        if ctx.input_mut(|i| i.consume_key(egui::Modifiers::COMMAND, egui::Key::S)) && self.dirty {
+            self.save();
+        }
+
+        // Guard the window close (X) against unsaved edits.
+        if self.dirty
+            && self.pending.is_none()
+            && ctx.input(|i| i.viewport().close_requested())
+        {
+            ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
+            self.pending = Some(Pending::Quit);
+        }
+
         egui::TopBottomPanel::top("bar").show(ctx, |ui| {
             ui.add_space(4.0);
             ui.heading("protoglot");
@@ -250,7 +343,7 @@ impl eframe::App for App {
                             ui.weak(&kind);
                         });
                         if clicked {
-                            self.open(idx);
+                            self.request_open(idx);
                         }
                     }
                 });
@@ -317,6 +410,8 @@ impl eframe::App for App {
                 }
             });
         });
+
+        self.show_guard(ctx);
     }
 }
 
