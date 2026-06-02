@@ -31,38 +31,56 @@ jobs:
           targets: ${{ matrix.target }}
       - uses: Swatinem/rust-cache@v2
 
-      - name: Build CLI
-        run: cargo build --release -p protoglot-cli --target ${{ matrix.target }} --locked
+      # The desktop app (egui + rfd) needs GUI/GTK dev libs to build on Linux.
+      - name: Install Linux GUI build deps
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-3-dev libxcb-render0-dev \
+            libxcb-shape0-dev libxcb-xfixes0-dev libxkbcommon-dev libssl-dev
+
+      - name: Build
+        run: cargo build --release -p protoglot-cli -p protoglot-desktop --target ${{ matrix.target }} --locked
 
       - name: Package
         id: package
         shell: bash
         run: |
-          dist="protoglot-${{ github.ref_name }}-${{ matrix.target }}"
-          mkdir "$dist"
-          if [ "${{ matrix.os }}" = "windows-latest" ]; then
-            cp "target/${{ matrix.target }}/release/protoglot.exe" "$dist/"
-            cp "target/${{ matrix.target }}/release/pglot.exe" "$dist/"
-          else
-            cp "target/${{ matrix.target }}/release/protoglot" "$dist/"
-            cp "target/${{ matrix.target }}/release/pglot" "$dist/"
-          fi
-          cp README.md LICENSE-MIT LICENSE-APACHE "$dist/"
-          if [ "${{ matrix.os }}" = "windows-latest" ]; then
-            7z a "$dist.zip" "$dist" >/dev/null
-            echo "asset=$dist.zip" >> "$GITHUB_OUTPUT"
-          else
-            tar czf "$dist.tar.gz" "$dist"
-            echo "asset=$dist.tar.gz" >> "$GITHUB_OUTPUT"
-          fi
+          ver="${{ github.ref_name }}"
+          t="${{ matrix.target }}"
+          rel="target/$t/release"
+          ext=""
+          [ "${{ runner.os }}" = "Windows" ] && ext=".exe"
+
+          pkg() { # $1 = archive name prefix; rest = binary basenames
+            name="$1"; shift
+            dist="$name-$ver-$t"
+            mkdir "$dist"
+            for b in "$@"; do cp "$rel/$b$ext" "$dist/"; done
+            cp README.md LICENSE-MIT LICENSE-APACHE "$dist/"
+            if [ "${{ runner.os }}" = "Windows" ]; then
+              7z a "$dist.zip" "$dist" >/dev/null && echo "$dist.zip"
+            else
+              tar czf "$dist.tar.gz" "$dist" && echo "$dist.tar.gz"
+            fi
+          }
+
+          cli=$(pkg protoglot protoglot pglot)
+          gui=$(pkg protoglot-desktop protoglot-desktop)
+          {
+            echo "assets<<EOF"
+            echo "$cli"
+            echo "$gui"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Attest build provenance (SLSA)
         uses: actions/attest-build-provenance@v2
         with:
-          subject-path: ${{ steps.package.outputs.asset }}
+          subject-path: ${{ steps.package.outputs.assets }}
 
       - name: Publish to release
         uses: softprops/action-gh-release@v2
         with:
-          files: ${{ steps.package.outputs.asset }}
+          files: ${{ steps.package.outputs.assets }}
           generate_release_notes: true

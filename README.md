@@ -332,14 +332,18 @@ A native [egui](https://github.com/emilk/egui) GUI — all Rust, no web view —
 that drives the same engine as the CLI: pick a collection, run it, browse
 results, and edit request source with TOML highlighting and save-back.
 
+Download `protoglot-desktop-*` from [Releases](https://github.com/mqmalagris/protoglot/releases)
+(double-click to run), or from source:
+
 ```sh
 cargo run -p protoglot-desktop
 ```
 
 ## Releases & provenance
 
-Tagging `vX.Y.Z` builds the `protoglot` CLI for Linux, macOS (x86_64 + arm64),
-and Windows, publishes a GitHub Release with the archives, and attaches **SLSA
+Tagging `vX.Y.Z` builds the `protoglot` CLI **and the desktop app** for Linux,
+macOS (x86_64 + arm64), and Windows, publishes a GitHub Release with the
+archives (`protoglot-*` = CLI, `protoglot-desktop-*` = GUI), and attaches **SLSA
 build provenance** (Sigstore-signed, via GitHub artifact attestations). Verify a
 downloaded artifact:
 
