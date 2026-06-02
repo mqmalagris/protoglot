@@ -33,11 +33,11 @@ See [`protoglot-spec.md`](./protoglot-spec.md) for the full design.
 - **WebSocket** (Phase 5): a scriptable `[[steps]]` roteiro (send / expect) over
   `tokio-tungstenite` (rustls for `wss`); frames collect into a transcript and a
   failed `expect_contains` fails the request. Runs in CI and the desktop.
-- **gRPC** (Phase 6): **dynamic** unary invocation — a `.proto` is compiled at
-  runtime (`protox`), descriptors via `prost-reflect`, and a custom tonic codec
-  ferries `DynamicMessage`s. The JSON `[message]` becomes the request; the reply
-  serializes back to JSON so jsonpath assertions apply. Reflection/streaming/TLS
-  pending.
+- **gRPC** (Phase 6): **dynamic** unary invocation — descriptors from a
+  runtime-compiled `.proto` (`protox`) **or server reflection** (v1, v1alpha
+  fallback); a custom tonic codec ferries `DynamicMessage`s. The JSON `[message]`
+  becomes the request; the reply serializes back to JSON so jsonpath assertions
+  apply. Streaming/TLS pending.
 
 The **desktop app** (Phase 4) is a native **egui** GUI in
 [`crates/desktop`](./crates/desktop) — all-Rust, no WebView/JS, calling `core`
@@ -184,7 +184,7 @@ name = "GetUser"
 target = "{{grpcHost}}:50051"      # plaintext h2
 service = "user.v1.UserService"
 method = "GetUser"
-proto = "./protos/user.proto"      # runtime-compiled; reflection not yet supported
+proto = "./protos/user.proto"      # runtime-compiled. Or omit + schema = "reflection"
 
 [message]                          # request body, as JSON; {{vars}} resolved
 id = "{{userId}}"

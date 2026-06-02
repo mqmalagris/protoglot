@@ -3786,6 +3786,7 @@ dependencies = [
  "owo-colors",
  "prost",
  "prost-reflect",
+ "prost-types",
  "protoglot-format",
  "protox",
  "regex",

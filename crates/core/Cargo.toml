@@ -35,6 +35,7 @@ tokio-tungstenite.workspace = true
 tonic.workspace = true
 prost.workspace = true
 prost-reflect.workspace = true
+prost-types.workspace = true
 protox.workspace = true
 http.workspace = true
 

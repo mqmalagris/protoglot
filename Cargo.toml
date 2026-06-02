@@ -29,6 +29,7 @@ tokio-tungstenite = { version = "0.24", features = ["rustls-tls-webpki-roots"] }
 tonic = "0.12"
 prost = "0.13"
 prost-reflect = { version = "0.14", features = ["serde"] }
+prost-types = "0.13"
 protox = "0.7"
 http = "1"
 sxd-document = "0.3"
