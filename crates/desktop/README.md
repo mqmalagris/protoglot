@@ -26,10 +26,12 @@ source and results on the right.
 
 - **egui chosen over Tauri+Svelte and Slint** (see project DEFERRED notes):
   devtool sweet spot, 100% Rust, MIT/Apache license match, simplest async wiring.
-- **Compiles; not yet run on a display** (scaffolded headless). First
+- **Editable source + save-back** — edit a request's TOML in place and **Save**
+  writes it back to disk (row name refreshes). Switching requests discards
+  unsaved edits.
+- **TOML syntax highlighting** — a small dependency-free highlighter
+  (`src/highlight.rs`): comments, strings (incl. multi-line `"""`), `[sections]`,
+  keys. No syntect/onig (cross-compile clean). TOML-only for now.
+- **Compiles; not yet run on a display** (built headless). First
   `cargo run -p protoglot-desktop` on a desktop is the smoke test.
-- **Read-only source view** for now (egui `code_editor`, non-interactive); a
-  real editor + save-back is the next step.
-- **No syntax highlighting** (the WebView's CodeMirror is what we gave up). An
-  egui syntax-highlight layer can be added later.
 - **Streaming** (WS/gRPC) — arrives with Phases 5/6.

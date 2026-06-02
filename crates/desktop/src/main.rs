@@ -14,6 +14,8 @@ use protoglot_core::runner::{RunOptions, Runner};
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::{channel, Receiver};
 
+mod highlight;
+
 struct RequestRow {
     name: String,
     kind: String,
@@ -28,6 +30,7 @@ struct App {
     results: Vec<ExecutionResult>,
     selected: Option<usize>,
     source: String,
+    dirty: bool,
     status: String,
     running: bool,
     rx: Option<Receiver<Vec<ExecutionResult>>>,
@@ -47,6 +50,7 @@ impl App {
             results: Vec::new(),
             selected: None,
             source: String::new(),
+            dirty: false,
             status: String::new(),
             running: false,
             rx: None,
@@ -80,6 +84,25 @@ impl App {
         self.selected = Some(idx);
         self.source =
             std::fs::read_to_string(&self.requests[idx].path).unwrap_or_else(|e| e.to_string());
+        self.dirty = false;
+    }
+
+    fn save(&mut self) {
+        let Some(idx) = self.selected else { return };
+        let path = self.requests[idx].path.clone();
+        match std::fs::write(&path, &self.source) {
+            Ok(()) => {
+                self.dirty = false;
+                // Refresh this row's name/kind in case `name`/`kind` changed,
+                // without dropping any run results already on screen.
+                if let Ok(req) = format::load_request(&path) {
+                    self.requests[idx].name = req.name().to_string();
+                    self.requests[idx].kind = format!("{:?}", req.kind()).to_lowercase();
+                }
+                self.status = format!("saved {}", path.display());
+            }
+            Err(e) => self.status = format!("save failed: {e}"),
+        }
     }
 
     fn run(&mut self, ctx: &egui::Context) {
@@ -186,6 +209,13 @@ impl eframe::App for App {
                 {
                     self.run(ctx);
                 }
+                let can_save = self.selected.is_some() && self.dirty;
+                if ui
+                    .add_enabled(can_save, egui::Button::new("Save"))
+                    .clicked()
+                {
+                    self.save();
+                }
             });
             if !self.status.is_empty() {
                 ui.label(&self.status);
@@ -229,14 +259,27 @@ impl eframe::App for App {
         egui::CentralPanel::default().show(ctx, |ui| {
             egui::ScrollArea::vertical().show(ui, |ui| {
                 if self.selected.is_some() {
-                    ui.label(egui::RichText::new("SOURCE").strong().weak());
-                    let mut source = self.source.clone();
-                    ui.add(
-                        egui::TextEdit::multiline(&mut source)
-                            .code_editor()
+                    ui.horizontal(|ui| {
+                        ui.label(egui::RichText::new("SOURCE").weak());
+                        if self.dirty {
+                            ui.weak("• edited (Ctrl+S not bound; use Save)");
+                        }
+                    });
+                    let mut layouter =
+                        |ui: &egui::Ui, text: &str, wrap_width: f32| {
+                            let mut job = highlight::toml_highlight(text);
+                            job.wrap.max_width = wrap_width;
+                            ui.fonts(|f| f.layout_job(job))
+                        };
+                    let resp = ui.add(
+                        egui::TextEdit::multiline(&mut self.source)
                             .desired_width(f32::INFINITY)
-                            .interactive(false),
+                            .desired_rows(18)
+                            .layouter(&mut layouter),
                     );
+                    if resp.changed() {
+                        self.dirty = true;
+                    }
                     ui.add_space(12.0);
                 }
 
