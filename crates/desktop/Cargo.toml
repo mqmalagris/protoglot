@@ -15,3 +15,10 @@ protoglot-core.workspace = true
 tokio.workspace = true
 eframe = "0.29"
 rfd = "0.15"
+# Self-update from GitHub Releases (rustls, no OpenSSL).
+self_update = { version = "0.42", default-features = false, features = [
+    "rustls",
+    "archive-tar",
+    "archive-zip",
+    "compression-flate2",
+] }

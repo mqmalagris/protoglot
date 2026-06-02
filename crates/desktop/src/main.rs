@@ -15,6 +15,7 @@ use std::path::{Path, PathBuf};
 use std::sync::mpsc::{channel, Receiver};
 
 mod highlight;
+mod update;
 
 struct RequestRow {
     name: String,
@@ -49,6 +50,11 @@ struct App {
     status: String,
     running: bool,
     rx: Option<Receiver<Vec<ExecutionResult>>>,
+    // Self-update state.
+    update_msg: String,
+    update_offer: Option<String>,
+    update_busy: bool,
+    update_rx: Option<Receiver<update::UpdateOutcome>>,
 }
 
 impl App {
@@ -70,6 +76,67 @@ impl App {
             status: String::new(),
             running: false,
             rx: None,
+            update_msg: String::new(),
+            update_offer: None,
+            update_busy: false,
+            update_rx: None,
+        }
+    }
+
+    fn check_updates(&mut self, ctx: &egui::Context) {
+        if self.update_busy {
+            return;
+        }
+        self.update_busy = true;
+        self.update_msg = "Checking for updates…".into();
+        let (tx, rx) = channel();
+        self.update_rx = Some(rx);
+        let ctx = ctx.clone();
+        std::thread::spawn(move || {
+            let _ = tx.send(update::check());
+            ctx.request_repaint();
+        });
+    }
+
+    fn install_update(&mut self, ctx: &egui::Context) {
+        if self.update_busy {
+            return;
+        }
+        self.update_busy = true;
+        self.update_offer = None;
+        self.update_msg = "Downloading update…".into();
+        let (tx, rx) = channel();
+        self.update_rx = Some(rx);
+        let ctx = ctx.clone();
+        std::thread::spawn(move || {
+            let _ = tx.send(update::install());
+            ctx.request_repaint();
+        });
+    }
+
+    fn poll_update(&mut self) {
+        let outcome = self.update_rx.as_ref().and_then(|rx| rx.try_recv().ok());
+        if let Some(outcome) = outcome {
+            self.update_busy = false;
+            self.update_rx = None;
+            match outcome {
+                update::UpdateOutcome::UpToDate => {
+                    self.update_msg = "You're on the latest version.".into();
+                    self.update_offer = None;
+                }
+                update::UpdateOutcome::Available(v) => {
+                    self.update_msg = format!("Update available: v{v}");
+                    self.update_offer = Some(v);
+                }
+                update::UpdateOutcome::Updated(v) => {
+                    self.update_msg = format!("Updated to v{v} — restart protoglot to use it.");
+                    self.update_offer = None;
+                }
+                update::UpdateOutcome::Failed(e) => {
+                    self.update_msg = format!("Update failed: {e}");
+                    self.update_offer = None;
+                }
+            }
         }
     }
 
@@ -263,6 +330,7 @@ fn status_color(status: ExecStatus) -> egui::Color32 {
 impl eframe::App for App {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         self.poll();
+        self.poll_update();
 
         // Ctrl/Cmd+S saves the current request.
         if ctx.input_mut(|i| i.consume_key(egui::Modifiers::COMMAND, egui::Key::S)) && self.dirty {
@@ -309,9 +377,27 @@ impl eframe::App for App {
                 {
                     self.save();
                 }
+                ui.separator();
+                if ui
+                    .add_enabled(!self.update_busy, egui::Button::new("Check updates"))
+                    .clicked()
+                {
+                    self.check_updates(ctx);
+                }
+                if let Some(v) = self.update_offer.clone() {
+                    if ui
+                        .add_enabled(!self.update_busy, egui::Button::new(format!("Install v{v}")))
+                        .clicked()
+                    {
+                        self.install_update(ctx);
+                    }
+                }
             });
             if !self.status.is_empty() {
                 ui.label(&self.status);
+            }
+            if !self.update_msg.is_empty() {
+                ui.weak(&self.update_msg);
             }
             ui.add_space(4.0);
         });

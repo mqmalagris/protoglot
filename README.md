@@ -332,8 +332,10 @@ A native [egui](https://github.com/emilk/egui) GUI — all Rust, no web view —
 that drives the same engine as the CLI: pick a collection, run it, browse
 results, and edit request source with TOML highlighting and save-back.
 
-Download `protoglot-desktop-*` from [Releases](https://github.com/mqmalagris/protoglot/releases)
-(double-click to run), or from source:
+It checks GitHub Releases for updates in-app ("Check updates" → "Install") and
+replaces itself in place. Download `protoglot-desktop-*` from
+[Releases](https://github.com/mqmalagris/protoglot/releases) (double-click to
+run), or from source:
 
 ```sh
 cargo run -p protoglot-desktop
