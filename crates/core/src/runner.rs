@@ -147,4 +147,25 @@ impl Runner {
         }
         results
     }
+
+    /// Run requests concurrently, up to `concurrency` in flight, preserving
+    /// result order. Each request gets a clone of `base_scope`, so **captures
+    /// do not propagate** between requests here — use sequential [`run_all`]
+    /// when requests depend on each other (e.g. auth chaining).
+    pub async fn run_all_concurrent(
+        &self,
+        items: &[LoadedRequest],
+        base_scope: &Scope,
+        concurrency: usize,
+    ) -> Vec<ExecutionResult> {
+        use futures::stream::{self, StreamExt};
+        stream::iter(items.iter())
+            .map(|item| {
+                let mut scope = base_scope.clone();
+                async move { self.run_request(&item.request, &mut scope).await }
+            })
+            .buffered(concurrency.max(1))
+            .collect()
+            .await
+    }
 }

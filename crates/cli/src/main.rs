@@ -91,6 +91,12 @@ struct RunArgs {
     /// Per-request timeout in seconds (0 disables it).
     #[arg(long, default_value_t = 30)]
     timeout: u64,
+    /// Run up to N requests concurrently (captures don't propagate when > 1).
+    #[arg(long, default_value_t = 1)]
+    concurrency: usize,
+    /// Re-run automatically when a file in the collection changes.
+    #[arg(long)]
+    watch: bool,
     /// Inline variable override (highest precedence). Repeatable.
     #[arg(long = "var", value_name = "KEY=VALUE")]
     vars: Vec<String>,
@@ -121,7 +127,14 @@ async fn main() {
     let cli = Cli::parse();
 
     let code = match &cli.command {
-        Command::Run(args) | Command::Test(args) => match run(args).await {
+        Command::Run(args) | Command::Test(args) if args.watch => match watch_loop(args).await {
+            Ok(()) => 0,
+            Err(e) => {
+                eprintln!("error: {e:#}");
+                2
+            }
+        },
+        Command::Run(args) | Command::Test(args) => match execute_once(args).await {
             Ok(any_failed) => {
                 if any_failed {
                     1
@@ -164,7 +177,7 @@ fn codegen_cmd(args: &CodegenArgs) -> anyhow::Result<()> {
 }
 
 /// Returns `true` if any request failed or errored.
-async fn run(args: &RunArgs) -> anyhow::Result<bool> {
+async fn execute_once(args: &RunArgs) -> anyhow::Result<bool> {
     let mut scope = build_scope(&args.path, &args.env, &args.vars)?;
 
     let items = format::collect_requests(&args.path)
@@ -174,14 +187,83 @@ async fn run(args: &RunArgs) -> anyhow::Result<bool> {
     }
 
     let runner = Runner::with_timeout(Duration::from_secs(args.timeout));
-    let opts = RunOptions { bail: args.bail };
-    let results = runner.run_all(&items, &mut scope, &opts).await;
+
+    let results = if args.concurrency > 1 {
+        if args.bail {
+            eprintln!("warning: --bail is ignored with --concurrency > 1");
+        }
+        if items.iter().any(|i| !i.request.captures().is_empty()) {
+            eprintln!("warning: captures do not propagate across requests in parallel mode");
+        }
+        runner
+            .run_all_concurrent(&items, &scope, args.concurrency)
+            .await
+    } else {
+        let opts = RunOptions { bail: args.bail };
+        runner.run_all(&items, &mut scope, &opts).await
+    };
 
     let rendered = report::render(&results, args.reporter.into());
     println!("{rendered}");
 
     let (_, failed, errored) = report::tally(&results);
     Ok(failed + errored > 0)
+}
+
+/// Run once, then re-run whenever a file in the collection changes.
+async fn watch_loop(args: &RunArgs) -> anyhow::Result<()> {
+    use notify::{RecursiveMode, Watcher};
+
+    let _ = execute_once(args).await; // first run; keep watching even on failure
+
+    let watch_path = if args.path.is_dir() {
+        args.path.clone()
+    } else {
+        args.path
+            .parent()
+            .filter(|p| !p.as_os_str().is_empty())
+            .unwrap_or(Path::new("."))
+            .to_path_buf()
+    };
+
+    let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
+    let mut watcher = notify::recommended_watcher(move |res| {
+        let _ = tx.send(res);
+    })?;
+    watcher.watch(&watch_path, RecursiveMode::Recursive)?;
+    eprintln!("watching {} (ctrl-c to stop)", watch_path.display());
+
+    while let Some(res) = rx.recv().await {
+        if !res.map(|e| touches_toml(&e)).unwrap_or(false) {
+            continue;
+        }
+        // Coalesce a burst (editor saves emit several events) by waiting for a
+        // quiet window with no further .toml changes before re-running once.
+        loop {
+            tokio::time::sleep(Duration::from_millis(250)).await;
+            let mut more = false;
+            while let Ok(res) = rx.try_recv() {
+                if res.map(|e| touches_toml(&e)).unwrap_or(false) {
+                    more = true;
+                }
+            }
+            if !more {
+                break;
+            }
+        }
+        eprintln!("\n── change detected, re-running ──");
+        let _ = execute_once(args).await;
+    }
+    Ok(())
+}
+
+/// Only `.toml` changes matter — ignores editor temp files and any output the
+/// run itself may write into the collection directory.
+fn touches_toml(event: &notify::Event) -> bool {
+    event
+        .paths
+        .iter()
+        .any(|p| p.extension().and_then(|e| e.to_str()) == Some("toml"))
 }
 
 fn build_scope(path: &Path, env: &Option<String>, vars: &[String]) -> anyhow::Result<Scope> {

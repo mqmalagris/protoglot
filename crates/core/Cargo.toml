@@ -27,6 +27,7 @@ uuid.workspace = true
 chrono.workspace = true
 tracing.workspace = true
 owo-colors.workspace = true
+futures.workspace = true
 
 [dev-dependencies]
 wiremock = "0.6"
