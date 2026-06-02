@@ -265,3 +265,8 @@ Reporters: `pretty` (default), `json`, `junit`, `tap`. Exit code is non-zero if
 any assertion fails — so CI breaks the build.
 
 There is a runnable example collection in [`examples/demo`](./examples/demo).
+
+## License
+
+Dual-licensed under either of [MIT](./LICENSE-MIT) or
+[Apache-2.0](./LICENSE-APACHE) at your option.
