@@ -108,6 +108,7 @@ mod tests {
             assertions: vec![],
             capture: vec![],
             auth,
+            data: None,
         }
     }
 

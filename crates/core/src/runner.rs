@@ -8,6 +8,7 @@ use crate::error::Result;
 use crate::protocols::{self, ExecOutcome};
 use crate::report::{AssertionOutcome, ExecStatus, ExecutionResult, Protocol, ResponseSummary};
 use protoglot_format::{LoadedRequest, Request};
+use std::path::Path;
 use std::time::{Duration, Instant};
 
 /// Default per-request timeout. Without one, a dead server hangs the whole run
@@ -169,7 +170,58 @@ impl Runner {
         }
     }
 
-    /// Run a sequence of requests in order, sharing one mutable scope.
+    /// Run one collection item, expanding it into N executions when it declares
+    /// a data source (§Phase 7); otherwise a single execution. Each data row
+    /// runs against an ephemeral scope (base scope + row variables), so row
+    /// values and any captures stay isolated to that iteration.
+    pub async fn run_item(
+        &self,
+        item: &LoadedRequest,
+        scope: &mut Scope,
+    ) -> Vec<ExecutionResult> {
+        let Some(source) = item.request.data() else {
+            return vec![self.run_request(&item.request, scope).await];
+        };
+
+        let dir = item.path.parent().unwrap_or_else(|| Path::new("."));
+        let data_path = dir.join(&source.file);
+        let rows = match crate::data::load_rows(&data_path, source.format.as_deref()) {
+            Ok(rows) => rows,
+            Err(e) => return vec![self.error_result(&item.request, e.to_string())],
+        };
+        if rows.is_empty() {
+            return vec![self.error_result(
+                &item.request,
+                format!("data file {} has no rows", data_path.display()),
+            )];
+        }
+
+        let mut results = Vec::with_capacity(rows.len());
+        for (i, row) in rows.iter().enumerate() {
+            let mut row_scope = scope.clone();
+            for (k, v) in row {
+                row_scope.set(k.clone(), v.clone());
+            }
+            let mut result = self.run_request(&item.request, &mut row_scope).await;
+            result.request_name = format!("{} [row {}]", result.request_name, i + 1);
+            results.push(result);
+        }
+        results
+    }
+
+    fn error_result(&self, request: &Request, message: String) -> ExecutionResult {
+        ExecutionResult {
+            request_name: request.name().to_string(),
+            protocol: Protocol::from(request.kind()),
+            status: ExecStatus::Error,
+            duration: Duration::from_secs(0),
+            response: None,
+            assertions: Vec::new(),
+            error: Some(message),
+        }
+    }
+
+    /// Run a sequence of items in order, sharing one mutable scope.
     pub async fn run_all(
         &self,
         items: &[LoadedRequest],
@@ -178,20 +230,21 @@ impl Runner {
     ) -> Vec<ExecutionResult> {
         let mut results = Vec::with_capacity(items.len());
         for item in items {
-            let result = self.run_request(&item.request, scope).await;
-            let stop = opts.bail && !result.passed();
-            results.push(result);
-            if stop {
+            let item_results = self.run_item(item, scope).await;
+            let any_failed = item_results.iter().any(|r| !r.passed());
+            results.extend(item_results);
+            if opts.bail && any_failed {
                 break;
             }
         }
         results
     }
 
-    /// Run requests concurrently, up to `concurrency` in flight, preserving
-    /// result order. Each request gets a clone of `base_scope`, so **captures
-    /// do not propagate** between requests here — use sequential [`run_all`]
-    /// when requests depend on each other (e.g. auth chaining).
+    /// Run items concurrently, up to `concurrency` in flight, preserving order.
+    /// Each item gets a clone of `base_scope`, so **captures do not propagate**
+    /// between requests here — use sequential [`run_all`] when requests depend
+    /// on each other (e.g. auth chaining). Data-driven rows within one item
+    /// still run sequentially.
     pub async fn run_all_concurrent(
         &self,
         items: &[LoadedRequest],
@@ -199,13 +252,98 @@ impl Runner {
         concurrency: usize,
     ) -> Vec<ExecutionResult> {
         use futures::stream::{self, StreamExt};
-        stream::iter(items.iter())
+        let nested: Vec<Vec<ExecutionResult>> = stream::iter(items.iter())
             .map(|item| {
                 let mut scope = base_scope.clone();
-                async move { self.run_request(&item.request, &mut scope).await }
+                async move { self.run_item(item, &mut scope).await }
             })
             .buffered(concurrency.max(1))
             .collect()
-            .await
+            .await;
+        nested.into_iter().flatten().collect()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use protoglot_format::{Assertion, DataSource, RestRequest};
+    use wiremock::matchers::method;
+    use wiremock::{Mock, MockServer, ResponseTemplate};
+
+    #[tokio::test]
+    async fn data_driven_expands_one_run_per_row() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .respond_with(ResponseTemplate::new(200))
+            .mount(&server)
+            .await;
+
+        let dir = std::env::temp_dir().join(format!("pg-data-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("ids.csv"), "id\n1\n2\n3\n").unwrap();
+
+        let request = Request::Rest(RestRequest {
+            name: "Item".into(),
+            method: "GET".into(),
+            url: format!("{}/item/{{{{id}}}}", server.uri()),
+            headers: Default::default(),
+            query: Default::default(),
+            body: None,
+            assertions: vec![Assertion::Status {
+                equals: Some(200),
+                in_range: None,
+            }],
+            capture: vec![],
+            auth: None,
+            data: Some(DataSource {
+                file: "ids.csv".into(),
+                format: None,
+            }),
+        });
+        let item = LoadedRequest {
+            path: dir.join("req.toml"),
+            request,
+        };
+
+        let runner = Runner::new();
+        let mut scope = Scope::new();
+        let results = runner
+            .run_all(std::slice::from_ref(&item), &mut scope, &RunOptions::default())
+            .await;
+        std::fs::remove_dir_all(&dir).ok();
+
+        assert_eq!(results.len(), 3, "one execution per CSV row");
+        assert!(results.iter().all(|r| r.passed()));
+        assert!(results[0].request_name.contains("[row 1]"));
+        assert!(results[2].request_name.contains("[row 3]"));
+    }
+
+    #[tokio::test]
+    async fn missing_data_file_yields_error_result() {
+        let request = Request::Rest(RestRequest {
+            name: "Item".into(),
+            method: "GET".into(),
+            url: "http://example.invalid/{{id}}".into(),
+            headers: Default::default(),
+            query: Default::default(),
+            body: None,
+            assertions: vec![],
+            capture: vec![],
+            auth: None,
+            data: Some(DataSource {
+                file: "nope.csv".into(),
+                format: None,
+            }),
+        });
+        let item = LoadedRequest {
+            path: std::env::temp_dir().join("req.toml"),
+            request,
+        };
+        let runner = Runner::new();
+        let mut scope = Scope::new();
+        let results = runner.run_item(&item, &mut scope).await;
+        assert_eq!(results.len(), 1);
+        assert!(matches!(results[0].status, ExecStatus::Error));
     }
 }

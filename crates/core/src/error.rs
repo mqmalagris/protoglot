@@ -20,6 +20,9 @@ pub enum Error {
     #[error("assertion engine error: {0}")]
     Assertion(String),
 
+    #[error("data file error: {0}")]
+    Data(String),
+
     #[error("io error: {0}")]
     Io(#[from] std::io::Error),
 }

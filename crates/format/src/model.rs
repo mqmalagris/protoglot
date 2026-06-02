@@ -86,6 +86,16 @@ impl Request {
             _ => &[],
         }
     }
+
+    /// Data-driven source (§Phase 7), if declared.
+    pub fn data(&self) -> Option<&DataSource> {
+        match self {
+            Request::Rest(r) => r.data.as_ref(),
+            Request::Graphql(r) => r.data.as_ref(),
+            Request::Soap(r) => r.data.as_ref(),
+            _ => None,
+        }
+    }
 }
 
 fn default_method() -> String {
@@ -110,6 +120,8 @@ pub struct RestRequest {
     pub capture: Vec<Capture>,
     #[serde(default)]
     pub auth: Option<Auth>,
+    #[serde(default)]
+    pub data: Option<DataSource>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -129,6 +141,8 @@ pub struct GraphqlRequest {
     pub capture: Vec<Capture>,
     #[serde(default)]
     pub auth: Option<Auth>,
+    #[serde(default)]
+    pub data: Option<DataSource>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -180,6 +194,8 @@ pub struct SoapRequest {
     pub capture: Vec<Capture>,
     #[serde(default)]
     pub auth: Option<Auth>,
+    #[serde(default)]
+    pub data: Option<DataSource>,
 }
 
 /// Authentication for a request. Header-style schemes (`bearer`, `basic`,
@@ -267,6 +283,17 @@ pub enum Assertion {
     BodyContains {
         value: String,
     },
+}
+
+/// Data-driven source (§spec Phase 7): iterate the request over each row of a
+/// CSV/JSON file. Columns/keys become variables for that iteration.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DataSource {
+    /// Path to the data file, relative to the request file.
+    pub file: String,
+    /// `csv` or `json`; inferred from the extension when omitted.
+    #[serde(default)]
+    pub format: Option<String>,
 }
 
 /// Declarative response capture (Phase 2 wiring; parsed now).

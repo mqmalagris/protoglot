@@ -15,3 +15,6 @@ desktop/src-tauri/target
 .claude/settings.local.json
 
 protoglot-spec.md
+
+# internal planning docs (not published)
+DEFERRED.md

@@ -22,6 +22,8 @@ See [`protoglot-spec.md`](./protoglot-spec.md) for the full design.
 - **Auth** (Phase 3): `bearer`, `basic`, `oauth2_client_credentials` (header
   schemes, any HTTP protocol), `aws_sigv4` request signing and `mtls` client
   certs (REST). OAuth2 authorization-code + PKCE is the remaining follow-up.
+- **Data-driven** (Phase 7): `[data]` iterates a request over each row of a
+  CSV/JSON file; columns/keys become variables for that row.
 
 gRPC, WebSocket, JS scripting, and the desktop app are **stubs / not yet built**
 — see the roadmap (§11) in the spec.
@@ -86,6 +88,28 @@ service = "execute-api"
 type = "mtls"
 pem = "./client-bundle.pem"   # or: cert = "...", key = "..."
 ```
+
+### Data-driven (Phase 7)
+
+```toml
+name = "Get user"
+url = "{{baseUrl}}/users/{{id}}"
+
+[data]
+file = "users.csv"     # relative to this request; format inferred (csv|json)
+
+[[assertions]]
+type = "status"
+equals = 200
+```
+`users.csv` (header row = variable names):
+```csv
+id,name
+1,ada
+2,grace
+```
+Runs the request once per row (`Get user [row 1]`, `[row 2]`, …), with `{{id}}`
+and `{{name}}` bound from each row. JSON datasets are an array of objects.
 
 ## Workspace
 
