@@ -1,0 +1,23 @@
+name = "Bearer auth"
+method = "GET"
+url = "{{baseUrl}}/bearer"
+
+# Try a real secret instead: token = "{{$secret:demo_token}}"
+# (resolves from env PROTOGLOT_SECRET_DEMO_TOKEN, never from git).
+[auth]
+type = "bearer"
+token = "demo-token-123"
+
+[[assertions]]
+type = "status"
+equals = 200
+
+[[assertions]]
+type = "jsonpath"
+path = "$.authenticated"
+equals = true
+
+[[assertions]]
+type = "jsonpath"
+path = "$.token"
+equals = "demo-token-123"

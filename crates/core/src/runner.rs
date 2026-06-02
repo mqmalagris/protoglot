@@ -8,7 +8,11 @@ use crate::error::Result;
 use crate::protocols::{self, ExecOutcome};
 use crate::report::{AssertionOutcome, ExecStatus, ExecutionResult, Protocol, ResponseSummary};
 use protoglot_format::{LoadedRequest, Request};
-use std::time::Instant;
+use std::time::{Duration, Instant};
+
+/// Default per-request timeout. Without one, a dead server hangs the whole run
+/// forever — fatal for CI.
+pub const DEFAULT_TIMEOUT_SECS: u64 = 30;
 
 #[derive(Debug, Clone, Default)]
 pub struct RunOptions {
@@ -29,8 +33,19 @@ impl Default for Runner {
 
 impl Runner {
     pub fn new() -> Self {
+        Self::with_timeout(Duration::from_secs(DEFAULT_TIMEOUT_SECS))
+    }
+
+    /// Build a runner whose HTTP client uses `timeout` per request. A zero
+    /// duration disables the timeout.
+    pub fn with_timeout(timeout: Duration) -> Self {
+        let mut builder = reqwest::Client::builder();
+        if !timeout.is_zero() {
+            builder = builder.timeout(timeout);
+        }
+        let client = builder.build().unwrap_or_else(|_| reqwest::Client::new());
         Self {
-            client: reqwest::Client::new(),
+            client,
             resolver: Resolver::new(),
         }
     }

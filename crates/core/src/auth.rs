@@ -199,6 +199,7 @@ pub fn build_mtls_client(material: &MtlsMaterial) -> Result<Client> {
     Client::builder()
         .use_rustls_tls()
         .identity(identity)
+        .timeout(std::time::Duration::from_secs(crate::runner::DEFAULT_TIMEOUT_SECS))
         .build()
         .map_err(Error::from)
 }

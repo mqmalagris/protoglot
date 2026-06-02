@@ -7,6 +7,7 @@ use protoglot_core::format::{self, VarMap};
 use protoglot_core::report::{self, Reporter};
 use protoglot_core::runner::{RunOptions, Runner};
 use std::path::PathBuf;
+use std::time::Duration;
 
 #[derive(Parser)]
 #[command(
@@ -40,6 +41,9 @@ struct RunArgs {
     /// Stop at the first failing request.
     #[arg(long)]
     bail: bool,
+    /// Per-request timeout in seconds (0 disables it).
+    #[arg(long, default_value_t = 30)]
+    timeout: u64,
     /// Inline variable override (highest precedence). Repeatable.
     #[arg(long = "var", value_name = "KEY=VALUE")]
     vars: Vec<String>,
@@ -107,7 +111,7 @@ async fn run(args: &RunArgs) -> anyhow::Result<bool> {
         bail!("no requests found at {}", args.path.display());
     }
 
-    let runner = Runner::new();
+    let runner = Runner::with_timeout(Duration::from_secs(args.timeout));
     let opts = RunOptions { bail: args.bail };
     let results = runner.run_all(&items, &mut scope, &opts).await;
 
