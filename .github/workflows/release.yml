@@ -1,0 +1,66 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write # create the release + upload assets
+  id-token: write # OIDC for Sigstore signing
+  attestations: write # write SLSA build-provenance attestations
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  release:
+    name: ${{ matrix.target }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: ubuntu-latest, target: x86_64-unknown-linux-gnu }
+          - { os: macos-13, target: x86_64-apple-darwin }
+          - { os: macos-latest, target: aarch64-apple-darwin }
+          - { os: windows-latest, target: x86_64-pc-windows-msvc }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Build CLI
+        run: cargo build --release -p protoglot-cli --target ${{ matrix.target }} --locked
+
+      - name: Package
+        id: package
+        shell: bash
+        run: |
+          dist="protoglot-${{ github.ref_name }}-${{ matrix.target }}"
+          mkdir "$dist"
+          if [ "${{ matrix.os }}" = "windows-latest" ]; then
+            cp "target/${{ matrix.target }}/release/protoglot.exe" "$dist/"
+          else
+            cp "target/${{ matrix.target }}/release/protoglot" "$dist/"
+          fi
+          cp README.md LICENSE-MIT LICENSE-APACHE "$dist/"
+          if [ "${{ matrix.os }}" = "windows-latest" ]; then
+            7z a "$dist.zip" "$dist" >/dev/null
+            echo "asset=$dist.zip" >> "$GITHUB_OUTPUT"
+          else
+            tar czf "$dist.tar.gz" "$dist"
+            echo "asset=$dist.tar.gz" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Attest build provenance (SLSA)
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: ${{ steps.package.outputs.asset }}
+
+      - name: Publish to release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ steps.package.outputs.asset }}
+          generate_release_notes: true

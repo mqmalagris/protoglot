@@ -1,0 +1,25 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  test:
+    name: build & test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      # The desktop crate (egui/rfd) needs GUI/GTK system libs; exclude it from
+      # headless CI. core/format/cli + the grpc-testserver live tests still run.
+      - name: Build
+        run: cargo build --workspace --exclude protoglot-desktop --locked
+      - name: Test
+        run: cargo test --workspace --exclude protoglot-desktop --locked

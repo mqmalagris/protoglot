@@ -1,14 +1,15 @@
 # protoglot
 
-Local-first, git-friendly multiprotocol API client (Rust + Tauri + CLI).
+[![CI](https://github.com/mqmalagris/protoglot/actions/workflows/ci.yml/badge.svg)](https://github.com/mqmalagris/protoglot/actions/workflows/ci.yml)
+
+Local-first, git-friendly multiprotocol API client in Rust — a first-class CLI
+plus a native desktop app, over one collection format.
 
 > Bruno's git+CLI portability × Postman's protocol breadth.
 
-See [`protoglot-spec.md`](./protoglot-spec.md) for the full design.
-
 ## Status
 
-**Phase 0 + 1 + 2** implemented:
+Implemented:
 
 - Workspace, TOML collection format, `core` runner, the `protoglot` CLI with
   `pretty`/`json`/`junit`/`tap` reporters and CI exit codes (Phase 0–1).
@@ -265,6 +266,18 @@ Reporters: `pretty` (default), `json`, `junit`, `tap`. Exit code is non-zero if
 any assertion fails — so CI breaks the build.
 
 There is a runnable example collection in [`examples/demo`](./examples/demo).
+
+## Releases & provenance
+
+Tagging `vX.Y.Z` builds the `protoglot` CLI for Linux, macOS (x86_64 + arm64),
+and Windows, publishes a GitHub Release with the archives, and generates **SLSA
+build provenance** (Sigstore-signed, via GitHub artifact attestations).
+
+Verify a downloaded artifact's provenance:
+
+```sh
+gh attestation verify protoglot-vX.Y.Z-<target>.tar.gz --repo mqmalagris/protoglot
+```
 
 ## License
 
