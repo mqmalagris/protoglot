@@ -79,6 +79,31 @@ impl Resolver {
         Ok(out)
     }
 
+    /// Synchronous resolution for previews/codegen. Resolves plain vars and
+    /// dynamic values; a `{{$secret:NAME}}` becomes a shell-style
+    /// `$PROTOGLOT_SECRET_NAME` placeholder so the secret value is never baked
+    /// into generated output. Unknown vars are left as the literal `{{var}}`.
+    pub fn resolve_sync(&self, template: &str, scope: &Scope) -> String {
+        template_re()
+            .replace_all(template, |caps: &regex::Captures| {
+                let token = caps.get(1).unwrap().as_str().trim();
+                if let Some(name) = token.strip_prefix("$secret:") {
+                    let key = name.trim().to_uppercase().replace('-', "_");
+                    format!("$PROTOGLOT_SECRET_{key}")
+                } else if token == "$uuid" {
+                    uuid::Uuid::new_v4().to_string()
+                } else if token == "$timestamp" {
+                    chrono::Utc::now().timestamp().to_string()
+                } else {
+                    match scope.get(token) {
+                        Some(v) => v.to_string(),
+                        None => format!("{{{{{token}}}}}"),
+                    }
+                }
+            })
+            .into_owned()
+    }
+
     async fn resolve_token(&self, token: &str, scope: &Scope) -> Result<String> {
         if let Some(name) = token.strip_prefix("$secret:") {
             return secrets::resolve_secret(name.trim()).await;

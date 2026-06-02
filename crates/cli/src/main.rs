@@ -2,6 +2,7 @@
 
 use anyhow::{anyhow, bail, Context};
 use clap::{Args, Parser, Subcommand, ValueEnum};
+use protoglot_core::codegen;
 use protoglot_core::environment::Scope;
 use protoglot_core::format::{self, VarMap};
 use protoglot_core::report::{self, Reporter};
@@ -29,6 +30,40 @@ enum Command {
     Test(RunArgs),
     /// Scaffold a new collection (runnable out of the box).
     New(NewArgs),
+    /// Export a request as a curl / fetch / reqwest snippet.
+    Codegen(CodegenArgs),
+}
+
+#[derive(Args)]
+struct CodegenArgs {
+    /// Path to a single request file.
+    path: PathBuf,
+    /// Snippet target.
+    #[arg(long = "as", value_enum, default_value_t = TargetArg::Curl)]
+    target: TargetArg,
+    /// Select an environment for variable resolution.
+    #[arg(long)]
+    env: Option<String>,
+    /// Inline variable override. Repeatable.
+    #[arg(long = "var", value_name = "KEY=VALUE")]
+    vars: Vec<String>,
+}
+
+#[derive(Copy, Clone, ValueEnum)]
+enum TargetArg {
+    Curl,
+    Fetch,
+    Reqwest,
+}
+
+impl From<TargetArg> for codegen::Target {
+    fn from(t: TargetArg) -> Self {
+        match t {
+            TargetArg::Curl => codegen::Target::Curl,
+            TargetArg::Fetch => codegen::Target::Fetch,
+            TargetArg::Reqwest => codegen::Target::Reqwest,
+        }
+    }
 }
 
 #[derive(Args)]
@@ -106,22 +141,31 @@ async fn main() {
                 2
             }
         },
+        Command::Codegen(args) => match codegen_cmd(args) {
+            Ok(()) => 0,
+            Err(e) => {
+                eprintln!("error: {e:#}");
+                2
+            }
+        },
     };
     std::process::exit(code);
 }
 
+fn codegen_cmd(args: &CodegenArgs) -> anyhow::Result<()> {
+    if !args.path.is_file() {
+        bail!("codegen expects a single request file, got {}", args.path.display());
+    }
+    let scope = build_scope(&args.path, &args.env, &args.vars)?;
+    let request = format::load_request(&args.path)?;
+    let snippet = codegen::generate(&request, args.target.into(), &scope)?;
+    print!("{snippet}");
+    Ok(())
+}
+
 /// Returns `true` if any request failed or errored.
 async fn run(args: &RunArgs) -> anyhow::Result<bool> {
-    let config = format::find_config(&args.path);
-
-    let env_vars: VarMap = match &args.env {
-        Some(name) => format::find_environment(&args.path, name)
-            .ok_or_else(|| anyhow!("environment `{name}` not found (looked for environments/{name}.toml)"))?,
-        None => VarMap::new(),
-    };
-
-    let cli_vars = parse_vars(&args.vars)?;
-    let mut scope = Scope::layered(&config.variables, &env_vars, &cli_vars);
+    let mut scope = build_scope(&args.path, &args.env, &args.vars)?;
 
     let items = format::collect_requests(&args.path)
         .with_context(|| format!("loading requests from {}", args.path.display()))?;
@@ -138,6 +182,18 @@ async fn run(args: &RunArgs) -> anyhow::Result<bool> {
 
     let (_, failed, errored) = report::tally(&results);
     Ok(failed + errored > 0)
+}
+
+fn build_scope(path: &Path, env: &Option<String>, vars: &[String]) -> anyhow::Result<Scope> {
+    let config = format::find_config(path);
+    let env_vars: VarMap = match env {
+        Some(name) => format::find_environment(path, name).ok_or_else(|| {
+            anyhow!("environment `{name}` not found (looked for environments/{name}.toml)")
+        })?,
+        None => VarMap::new(),
+    };
+    let cli_vars = parse_vars(vars)?;
+    Ok(Scope::layered(&config.variables, &env_vars, &cli_vars))
 }
 
 fn parse_vars(raw: &[String]) -> anyhow::Result<VarMap> {

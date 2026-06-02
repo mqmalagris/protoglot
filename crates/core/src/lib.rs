@@ -5,6 +5,7 @@
 pub mod assertions;
 pub mod auth;
 pub mod capture;
+pub mod codegen;
 pub mod environment;
 pub mod error;
 pub mod protocols;
