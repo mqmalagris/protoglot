@@ -33,13 +33,17 @@ See [`protoglot-spec.md`](./protoglot-spec.md) for the full design.
 - **WebSocket** (Phase 5): a scriptable `[[steps]]` roteiro (send / expect) over
   `tokio-tungstenite` (rustls for `wss`); frames collect into a transcript and a
   failed `expect_contains` fails the request. Runs in CI and the desktop.
+- **gRPC** (Phase 6): **dynamic** unary invocation — a `.proto` is compiled at
+  runtime (`protox`), descriptors via `prost-reflect`, and a custom tonic codec
+  ferries `DynamicMessage`s. The JSON `[message]` becomes the request; the reply
+  serializes back to JSON so jsonpath assertions apply. Reflection/streaming/TLS
+  pending.
 
 The **desktop app** (Phase 4) is a native **egui** GUI in
 [`crates/desktop`](./crates/desktop) — all-Rust, no WebView/JS, calling `core`
 directly. Run with `cargo run -p protoglot-desktop`.
 
-gRPC and JS scripting are **stubs / not yet built** — see the roadmap (§11) in
-the spec.
+JS scripting is **not yet built** — see the roadmap (§11) in the spec.
 
 ### Phase 2 syntax
 
@@ -171,6 +175,27 @@ timeout_ms = 2000
 Steps run in order: `send` writes a frame, `expect_contains` waits (up to
 `timeout_ms`, default 5000) for a frame containing the substring. A missed
 expectation fails the request; received frames appear in the transcript body.
+
+### gRPC (Phase 6)
+
+```toml
+kind = "grpc"
+name = "GetUser"
+target = "{{grpcHost}}:50051"      # plaintext h2
+service = "user.v1.UserService"
+method = "GetUser"
+proto = "./protos/user.proto"      # runtime-compiled; reflection not yet supported
+
+[message]                          # request body, as JSON; {{vars}} resolved
+id = "{{userId}}"
+
+[[assertions]]                     # run against the reply (serialized to JSON)
+type = "jsonpath"
+path = "$.name"
+exists = true
+```
+Unary only for now; the reply is converted to JSON so the usual assertions
+apply. A gRPC status error (e.g. `NotFound`) fails the request.
 
 ## Workspace
 

@@ -32,6 +32,11 @@ tracing.workspace = true
 owo-colors.workspace = true
 futures.workspace = true
 tokio-tungstenite.workspace = true
+tonic.workspace = true
+prost.workspace = true
+prost-reflect.workspace = true
+protox.workspace = true
+http.workspace = true
 
 [dev-dependencies]
 wiremock = "0.6"

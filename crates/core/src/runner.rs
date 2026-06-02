@@ -115,7 +115,7 @@ impl Runner {
         let name = request.name().to_string();
 
         let started = Instant::now();
-        let outcome = self.execute(request, scope).await;
+        let outcome = self.execute(request, scope, ctx.base_dir).await;
         let duration = started.elapsed();
 
         match outcome {
@@ -174,7 +174,12 @@ impl Runner {
         }
     }
 
-    async fn execute(&self, request: &Request, scope: &Scope) -> Result<ExecOutcome> {
+    async fn execute(
+        &self,
+        request: &Request,
+        scope: &Scope,
+        base_dir: &Path,
+    ) -> Result<ExecOutcome> {
         match request {
             Request::Rest(r) => {
                 protocols::rest::execute(r, scope, &self.client, &self.resolver).await
@@ -185,7 +190,9 @@ impl Runner {
             Request::Soap(r) => {
                 protocols::soap::execute(r, scope, &self.client, &self.resolver).await
             }
-            Request::Grpc(r) => protocols::grpc::execute(r, scope, &self.resolver).await,
+            Request::Grpc(r) => {
+                protocols::grpc::execute(r, scope, &self.resolver, base_dir).await
+            }
             Request::Websocket(r) => {
                 protocols::websocket::execute(r, scope, &self.resolver).await
             }

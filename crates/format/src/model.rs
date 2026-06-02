@@ -73,6 +73,7 @@ impl Request {
             Request::Rest(r) => &r.assertions,
             Request::Graphql(r) => &r.assertions,
             Request::Soap(r) => &r.assertions,
+            Request::Grpc(r) => &r.assertions,
             _ => &[],
         }
     }
@@ -171,6 +172,8 @@ pub struct GrpcRequest {
     pub proto: Option<String>,
     #[serde(default)]
     pub message: serde_json::Map<String, serde_json::Value>,
+    #[serde(default)]
+    pub assertions: Vec<Assertion>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
