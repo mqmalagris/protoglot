@@ -42,8 +42,10 @@ jobs:
           mkdir "$dist"
           if [ "${{ matrix.os }}" = "windows-latest" ]; then
             cp "target/${{ matrix.target }}/release/protoglot.exe" "$dist/"
+            cp "target/${{ matrix.target }}/release/pglot.exe" "$dist/"
           else
             cp "target/${{ matrix.target }}/release/protoglot" "$dist/"
+            cp "target/${{ matrix.target }}/release/pglot" "$dist/"
           fi
           cp README.md LICENSE-MIT LICENSE-APACHE "$dist/"
           if [ "${{ matrix.os }}" = "windows-latest" ]; then

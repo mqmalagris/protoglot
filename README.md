@@ -302,6 +302,8 @@ protoglot codegen <file> --as curl|fetch|reqwest   export a request as a snippet
 protoglot lint <path>                              flag hardcoded secrets
 ```
 
+Installs as both `protoglot` and the short alias `pglot` (`pglot test ./api`).
+
 `run` / `test` flags: `--env <name>`, `--reporter pretty|json|junit|tap`,
 `--var key=value` (repeatable), `--bail`, `--timeout <secs>`,
 `--concurrency <N>`, `--watch` (re-run on change), `--http-version auto|1|2`,

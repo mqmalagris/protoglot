@@ -9,6 +9,11 @@ description = "protoglot command-line interface"
 name = "protoglot"
 path = "src/main.rs"
 
+# Short alias — same binary, fewer keystrokes (`pglot test ./api`).
+[[bin]]
+name = "pglot"
+path = "src/main.rs"
+
 [dependencies]
 protoglot-core.workspace = true
 clap.workspace = true
