@@ -6,7 +6,8 @@ use protoglot_core::environment::Scope;
 use protoglot_core::format::{self, VarMap};
 use protoglot_core::report::{self, Reporter};
 use protoglot_core::runner::{RunOptions, Runner};
-use std::path::PathBuf;
+use std::fs;
+use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 #[derive(Parser)]
@@ -26,6 +27,17 @@ enum Command {
     Run(RunArgs),
     /// Run for CI: same execution, exits non-zero if anything fails.
     Test(RunArgs),
+    /// Scaffold a new collection (runnable out of the box).
+    New(NewArgs),
+}
+
+#[derive(Args)]
+struct NewArgs {
+    /// Directory to create for the new collection.
+    name: PathBuf,
+    /// Overwrite scaffold files if the directory already exists.
+    #[arg(long)]
+    force: bool,
 }
 
 #[derive(Args)]
@@ -72,22 +84,28 @@ impl From<ReporterArg> for Reporter {
 async fn main() {
     init_tracing();
     let cli = Cli::parse();
-    let args = match &cli.command {
-        Command::Run(a) | Command::Test(a) => a,
-    };
 
-    let code = match run(args).await {
-        Ok(any_failed) => {
-            if any_failed {
-                1
-            } else {
-                0
+    let code = match &cli.command {
+        Command::Run(args) | Command::Test(args) => match run(args).await {
+            Ok(any_failed) => {
+                if any_failed {
+                    1
+                } else {
+                    0
+                }
             }
-        }
-        Err(e) => {
-            eprintln!("error: {e:#}");
-            2
-        }
+            Err(e) => {
+                eprintln!("error: {e:#}");
+                2
+            }
+        },
+        Command::New(args) => match scaffold(args) {
+            Ok(()) => 0,
+            Err(e) => {
+                eprintln!("error: {e:#}");
+                2
+            }
+        },
     };
     std::process::exit(code);
 }
@@ -141,4 +159,114 @@ fn init_tracing() {
         .with_writer(std::io::stderr)
         .without_time()
         .init();
+}
+
+const ENV_LOCAL: &str = "baseUrl = \"https://jsonplaceholder.typicode.com\"\n";
+
+const REQUEST_EXAMPLE: &str = r#"name = "Get example"
+method = "GET"
+url = "{{baseUrl}}/todos/1"
+
+[[assertions]]
+type = "status"
+equals = 200
+
+[[assertions]]
+type = "jsonpath"
+path = "$.title"
+exists = true
+"#;
+
+fn root_toml(name: &str) -> String {
+    format!("name = \"{name}\"\n\n[variables]\nbaseUrl = \"https://jsonplaceholder.typicode.com\"\n")
+}
+
+/// The (relative path, content) pairs a new collection is made of.
+fn scaffold_files(name: &str) -> Vec<(PathBuf, String)> {
+    vec![
+        (PathBuf::from("protoglot.toml"), root_toml(name)),
+        (
+            PathBuf::from("environments").join("local.toml"),
+            ENV_LOCAL.to_string(),
+        ),
+        (
+            PathBuf::from("requests").join("get-example.toml"),
+            REQUEST_EXAMPLE.to_string(),
+        ),
+    ]
+}
+
+fn scaffold(args: &NewArgs) -> anyhow::Result<()> {
+    let root = &args.name;
+    if root.exists() {
+        let non_empty = fs::read_dir(root)
+            .map(|mut d| d.next().is_some())
+            .unwrap_or(false);
+        if non_empty && !args.force {
+            bail!(
+                "{} already exists and is not empty (use --force to overwrite)",
+                root.display()
+            );
+        }
+    }
+
+    let collection_name = root
+        .file_name()
+        .and_then(|s| s.to_str())
+        .unwrap_or("collection");
+
+    for (rel, content) in scaffold_files(collection_name) {
+        let target = root.join(&rel);
+        if let Some(parent) = target.parent() {
+            fs::create_dir_all(parent)?;
+        }
+        if target.exists() && !args.force {
+            continue;
+        }
+        fs::write(&target, content)
+            .with_context(|| format!("writing {}", target.display()))?;
+        println!("  created {}", display_rel(root, &target));
+    }
+
+    println!("\nScaffolded collection at {}", root.display());
+    println!("Try it:\n  protoglot test {}", root.display());
+    Ok(())
+}
+
+fn display_rel(root: &Path, target: &Path) -> String {
+    target
+        .strip_prefix(root.parent().unwrap_or(Path::new("")))
+        .unwrap_or(target)
+        .display()
+        .to_string()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn scaffold_produces_parseable_files() {
+        let files = scaffold_files("demo");
+        assert_eq!(files.len(), 3);
+
+        for (path, content) in &files {
+            let name = path.file_name().unwrap().to_str().unwrap();
+            match name {
+                "protoglot.toml" => {
+                    let cfg = protoglot_core::format::parse_config_str(content).unwrap();
+                    assert_eq!(cfg.name.as_deref(), Some("demo"));
+                }
+                "local.toml" => {
+                    let env = protoglot_core::format::parse_env_str(content).unwrap();
+                    assert!(env.contains_key("baseUrl"));
+                }
+                "get-example.toml" => {
+                    let req = protoglot_core::format::parse_request_str(content).unwrap();
+                    assert_eq!(req.name(), "Get example");
+                }
+                other => panic!("unexpected scaffold file: {other}"),
+            }
+        }
+    }
 }

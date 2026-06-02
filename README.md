@@ -110,9 +110,13 @@ cargo test
 ## CLI
 
 ```sh
+protoglot new <name>                              # scaffold a runnable collection
 protoglot run <path> [--env <name>] [--var k=v]...
 protoglot test <path> --reporter junit > results.xml
 ```
+
+`protoglot new myapi && protoglot test myapi` is green out of the box (the
+sample request hits jsonplaceholder).
 
 Reporters: `pretty` (default), `json`, `junit`, `tap`. Exit code is non-zero if
 any assertion fails — so CI breaks the build.
