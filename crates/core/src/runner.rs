@@ -14,6 +14,33 @@ use std::time::{Duration, Instant};
 /// forever — fatal for CI.
 pub const DEFAULT_TIMEOUT_SECS: u64 = 30;
 
+/// Which HTTP version to use. `Auto` negotiates via ALPN (h2 then h1.1).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum HttpVersion {
+    #[default]
+    Auto,
+    Http1,
+    /// Force HTTP/2 (prior knowledge — skips ALPN negotiation).
+    Http2,
+}
+
+/// HTTP client configuration for a run.
+#[derive(Debug, Clone)]
+pub struct ClientConfig {
+    /// `None` disables the per-request timeout.
+    pub timeout: Option<Duration>,
+    pub http_version: HttpVersion,
+}
+
+impl Default for ClientConfig {
+    fn default() -> Self {
+        Self {
+            timeout: Some(Duration::from_secs(DEFAULT_TIMEOUT_SECS)),
+            http_version: HttpVersion::Auto,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Default)]
 pub struct RunOptions {
     /// Stop at the first non-passing request.
@@ -33,16 +60,29 @@ impl Default for Runner {
 
 impl Runner {
     pub fn new() -> Self {
-        Self::with_timeout(Duration::from_secs(DEFAULT_TIMEOUT_SECS))
+        Self::with_config(ClientConfig::default())
     }
 
     /// Build a runner whose HTTP client uses `timeout` per request. A zero
     /// duration disables the timeout.
     pub fn with_timeout(timeout: Duration) -> Self {
+        Self::with_config(ClientConfig {
+            timeout: (!timeout.is_zero()).then_some(timeout),
+            ..ClientConfig::default()
+        })
+    }
+
+    /// Build a runner from a full client config (timeout + HTTP version).
+    pub fn with_config(config: ClientConfig) -> Self {
         let mut builder = reqwest::Client::builder();
-        if !timeout.is_zero() {
+        if let Some(timeout) = config.timeout {
             builder = builder.timeout(timeout);
         }
+        builder = match config.http_version {
+            HttpVersion::Auto => builder,
+            HttpVersion::Http1 => builder.http1_only(),
+            HttpVersion::Http2 => builder.http2_prior_knowledge(),
+        };
         let client = builder.build().unwrap_or_else(|_| reqwest::Client::new());
         Self {
             client,

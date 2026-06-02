@@ -6,7 +6,7 @@ use protoglot_core::codegen;
 use protoglot_core::environment::Scope;
 use protoglot_core::format::{self, VarMap};
 use protoglot_core::report::{self, Reporter};
-use protoglot_core::runner::{RunOptions, Runner};
+use protoglot_core::runner::{ClientConfig, HttpVersion, RunOptions, Runner};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
@@ -94,6 +94,9 @@ struct RunArgs {
     /// Run up to N requests concurrently (captures don't propagate when > 1).
     #[arg(long, default_value_t = 1)]
     concurrency: usize,
+    /// Force an HTTP version (auto negotiates h2/h1.1 via ALPN).
+    #[arg(long = "http-version", value_enum, default_value_t = HttpVersionArg::Auto)]
+    http_version: HttpVersionArg,
     /// Re-run automatically when a file in the collection changes.
     #[arg(long)]
     watch: bool,
@@ -108,6 +111,25 @@ enum ReporterArg {
     Json,
     Junit,
     Tap,
+}
+
+#[derive(Copy, Clone, ValueEnum)]
+enum HttpVersionArg {
+    Auto,
+    #[value(name = "1")]
+    One,
+    #[value(name = "2")]
+    Two,
+}
+
+impl From<HttpVersionArg> for HttpVersion {
+    fn from(v: HttpVersionArg) -> Self {
+        match v {
+            HttpVersionArg::Auto => HttpVersion::Auto,
+            HttpVersionArg::One => HttpVersion::Http1,
+            HttpVersionArg::Two => HttpVersion::Http2,
+        }
+    }
 }
 
 impl From<ReporterArg> for Reporter {
@@ -186,7 +208,10 @@ async fn execute_once(args: &RunArgs) -> anyhow::Result<bool> {
         bail!("no requests found at {}", args.path.display());
     }
 
-    let runner = Runner::with_timeout(Duration::from_secs(args.timeout));
+    let runner = Runner::with_config(ClientConfig {
+        timeout: (args.timeout != 0).then(|| Duration::from_secs(args.timeout)),
+        http_version: args.http_version.into(),
+    });
 
     let results = if args.concurrency > 1 {
         if args.bail {
