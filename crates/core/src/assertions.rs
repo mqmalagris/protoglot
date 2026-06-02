@@ -9,9 +9,17 @@ use protoglot_format::{Assertion, VarMap};
 use regex::Regex;
 use serde_json::Value;
 use serde_json_path::JsonPath;
+use std::path::Path;
 use std::time::Duration;
 
-pub fn evaluate(assertion: &Assertion, resp: &RawResponse, duration: Duration) -> AssertionOutcome {
+/// Evaluate one assertion. `base_dir` is the request file's directory, used to
+/// resolve relative paths (e.g. a JSON Schema `file`).
+pub fn evaluate(
+    assertion: &Assertion,
+    resp: &RawResponse,
+    duration: Duration,
+    base_dir: &Path,
+) -> AssertionOutcome {
     match assertion {
         Assertion::Status { equals, in_range } => eval_status(resp, *equals, *in_range),
         Assertion::Jsonpath {
@@ -33,6 +41,7 @@ pub fn evaluate(assertion: &Assertion, resp: &RawResponse, duration: Duration) -
             equals,
             namespaces,
         } => eval_xpath(resp, path, *exists, equals.as_deref(), namespaces),
+        Assertion::Schema { file, inline } => eval_schema(resp, file, inline, base_dir),
     }
 }
 
@@ -162,6 +171,62 @@ fn eval_body_contains(resp: &RawResponse, value: &str) -> AssertionOutcome {
     )
 }
 
+fn eval_schema(
+    resp: &RawResponse,
+    file: &Option<String>,
+    inline: &Option<Value>,
+    base_dir: &Path,
+) -> AssertionOutcome {
+    let desc = match file {
+        Some(f) => format!("schema {f}"),
+        None => "schema".to_string(),
+    };
+
+    let instance = match resp.json() {
+        Some(j) => j,
+        None => return AssertionOutcome::fail(desc, "response body is not valid JSON"),
+    };
+
+    let schema: Value = match (inline, file) {
+        (Some(inline), _) => inline.clone(),
+        (None, Some(file)) => {
+            let path = base_dir.join(file);
+            let text = match std::fs::read_to_string(&path) {
+                Ok(t) => t,
+                Err(e) => {
+                    return AssertionOutcome::fail(desc, format!("reading schema {}: {e}", path.display()))
+                }
+            };
+            match serde_json::from_str(&text) {
+                Ok(v) => v,
+                Err(e) => {
+                    return AssertionOutcome::fail(desc, format!("schema is not valid JSON: {e}"))
+                }
+            }
+        }
+        (None, None) => {
+            return AssertionOutcome::fail(desc, "schema assertion needs `file` or `inline`")
+        }
+    };
+
+    let validator = match jsonschema::validator_for(&schema) {
+        Ok(v) => v,
+        Err(e) => return AssertionOutcome::fail(desc, format!("invalid JSON Schema: {e}")),
+    };
+
+    let errors: Vec<String> = validator
+        .iter_errors(&instance)
+        .map(|e| format!("{e} (at {})", e.instance_path))
+        .take(5)
+        .collect();
+
+    if errors.is_empty() {
+        AssertionOutcome::pass(desc)
+    } else {
+        AssertionOutcome::fail(desc, errors.join("; "))
+    }
+}
+
 fn eval_xpath(
     resp: &RawResponse,
     path: &str,
@@ -261,6 +326,45 @@ mod tests {
         assert!(eval_xpath(&r, "//rate", None, Some("3.5"), &VarMap::new()).passed);
         assert!(!eval_xpath(&r, "//rate", None, Some("9.9"), &VarMap::new()).passed);
         assert!(!eval_xpath(&r, "//missing", Some(true), None, &VarMap::new()).passed);
+    }
+
+    #[test]
+    fn schema_inline_pass_and_fail() {
+        let schema = serde_json::json!({
+            "type": "object",
+            "required": ["id", "name"],
+            "properties": { "id": { "type": "integer" } }
+        });
+        let ok = resp(200, r#"{"id": 1, "name": "ada"}"#, "application/json");
+        assert!(eval_schema(&ok, &None, &Some(schema.clone()), Path::new(".")).passed);
+
+        let missing = resp(200, r#"{"name": "ada"}"#, "application/json");
+        assert!(!eval_schema(&missing, &None, &Some(schema.clone()), Path::new(".")).passed);
+
+        let wrong_type = resp(200, r#"{"id": "nope", "name": "ada"}"#, "application/json");
+        assert!(!eval_schema(&wrong_type, &None, &Some(schema), Path::new(".")).passed);
+    }
+
+    #[test]
+    fn schema_from_file() {
+        let dir = std::env::temp_dir().join(format!("pg-schema-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(
+            dir.join("s.json"),
+            r#"{"type":"object","required":["id"]}"#,
+        )
+        .unwrap();
+        let r = resp(200, r#"{"id": 1}"#, "application/json");
+        let outcome = eval_schema(&r, &Some("s.json".into()), &None, &dir);
+        std::fs::remove_dir_all(&dir).ok();
+        assert!(outcome.passed);
+    }
+
+    #[test]
+    fn schema_non_json_body_fails() {
+        let r = resp(200, "<not json>", "text/plain");
+        let schema = serde_json::json!({"type": "object"});
+        assert!(!eval_schema(&r, &None, &Some(schema), Path::new(".")).passed);
     }
 
     #[test]

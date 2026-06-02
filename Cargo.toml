@@ -23,6 +23,7 @@ base64 = "0.22"
 aws-sigv4 = "1"
 aws-credential-types = "1"
 csv = "1"
+jsonschema = { version = "0.26", default-features = false }
 sxd-document = "0.3"
 sxd-xpath = "0.4"
 regex = "1"

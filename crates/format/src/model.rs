@@ -283,6 +283,14 @@ pub enum Assertion {
     BodyContains {
         value: String,
     },
+    /// Validate the JSON response body against a JSON Schema, given either a
+    /// `file` (path relative to the request) or an `inline` schema object.
+    Schema {
+        #[serde(default)]
+        file: Option<String>,
+        #[serde(default)]
+        inline: Option<serde_json::Value>,
+    },
 }
 
 /// Data-driven source (§spec Phase 7): iterate the request over each row of a

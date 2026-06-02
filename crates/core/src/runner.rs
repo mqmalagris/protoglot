@@ -91,9 +91,15 @@ impl Runner {
         }
     }
 
-    /// Run one request. `scope` is `&mut` so future declarative captures (§10,
-    /// Phase 2) can write values back for subsequent requests.
-    pub async fn run_request(&self, request: &Request, scope: &mut Scope) -> ExecutionResult {
+    /// Run one request. `scope` is `&mut` so declarative captures (§10) can
+    /// write values back for subsequent requests. `base_dir` is the request
+    /// file's directory, used to resolve relative paths (e.g. schema files).
+    pub async fn run_request(
+        &self,
+        request: &Request,
+        scope: &mut Scope,
+        base_dir: &Path,
+    ) -> ExecutionResult {
         let protocol = Protocol::from(request.kind());
         let name = request.name().to_string();
 
@@ -109,7 +115,7 @@ impl Runner {
                 let mut assertions: Vec<AssertionOutcome> = request
                     .assertions()
                     .iter()
-                    .map(|a| assertions::evaluate(a, &response, duration))
+                    .map(|a| assertions::evaluate(a, &response, duration, base_dir))
                     .collect();
 
                 // Captures run after the response, writing into the shared scope
@@ -179,12 +185,13 @@ impl Runner {
         item: &LoadedRequest,
         scope: &mut Scope,
     ) -> Vec<ExecutionResult> {
+        let base_dir = item.path.parent().unwrap_or_else(|| Path::new("."));
+
         let Some(source) = item.request.data() else {
-            return vec![self.run_request(&item.request, scope).await];
+            return vec![self.run_request(&item.request, scope, base_dir).await];
         };
 
-        let dir = item.path.parent().unwrap_or_else(|| Path::new("."));
-        let data_path = dir.join(&source.file);
+        let data_path = base_dir.join(&source.file);
         let rows = match crate::data::load_rows(&data_path, source.format.as_deref()) {
             Ok(rows) => rows,
             Err(e) => return vec![self.error_result(&item.request, e.to_string())],
@@ -202,7 +209,7 @@ impl Runner {
             for (k, v) in row {
                 row_scope.set(k.clone(), v.clone());
             }
-            let mut result = self.run_request(&item.request, &mut row_scope).await;
+            let mut result = self.run_request(&item.request, &mut row_scope, base_dir).await;
             result.request_name = format!("{} [row {}]", result.request_name, i + 1);
             results.push(result);
         }

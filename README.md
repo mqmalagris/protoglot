@@ -24,6 +24,9 @@ See [`protoglot-spec.md`](./protoglot-spec.md) for the full design.
   certs (REST). OAuth2 authorization-code + PKCE is the remaining follow-up.
 - **Data-driven** (Phase 7): `[data]` iterates a request over each row of a
   CSV/JSON file; columns/keys become variables for that row.
+- **Contract testing** (Phase 8): the `schema` assertion validates the JSON
+  response against a JSON Schema (`file` or `inline`) — catches breaking
+  changes point assertions miss. OpenAPI-driven validation is a follow-up.
 
 gRPC, WebSocket, JS scripting, and the desktop app are **stubs / not yet built**
 — see the roadmap (§11) in the spec.
@@ -110,6 +113,24 @@ id,name
 ```
 Runs the request once per row (`Get user [row 1]`, `[row 2]`, …), with `{{id}}`
 and `{{name}}` bound from each row. JSON datasets are an array of objects.
+
+### Contract testing (Phase 8)
+
+```toml
+[[assertions]]
+type = "schema"
+file = "schemas/user.json"   # JSON Schema, relative to the request
+```
+Or inline:
+```toml
+[[assertions]]
+type = "schema"
+[assertions.inline]
+type = "object"
+required = ["id", "name"]
+```
+A failed schema reports the offending path, so it surfaces breaking changes
+(missing/renamed fields, wrong types) across commits.
 
 ## Workspace
 
