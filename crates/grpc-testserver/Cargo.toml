@@ -1,0 +1,17 @@
+[package]
+name = "grpc-testserver"
+version = "0.0.1"
+edition = "2021"
+publish = false
+description = "Test-only echo gRPC server for protoglot integration tests"
+
+[build-dependencies]
+tonic-build = "0.12"
+protoc-bin-vendored = "3"
+
+[dependencies]
+tonic = "0.12"
+tonic-reflection = "0.12"
+prost = "0.13"
+tokio = { version = "1", features = ["full"] }
+tokio-stream = { version = "0.1", features = ["net"] }

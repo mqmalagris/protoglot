@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["crates/format", "crates/core", "crates/cli", "crates/desktop"]
+members = ["crates/format", "crates/core", "crates/cli", "crates/desktop", "crates/grpc-testserver"]
 
 [workspace.package]
 version = "0.0.1"

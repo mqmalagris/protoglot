@@ -1,0 +1,11 @@
+syntax = "proto3";
+package echo;
+
+message Ping {
+  string msg = 1;
+  int32 n = 2;
+}
+
+service Echo {
+  rpc Say(Ping) returns (Ping);
+}
