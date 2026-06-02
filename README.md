@@ -27,6 +27,9 @@ See [`protoglot-spec.md`](./protoglot-spec.md) for the full design.
 - **Contract testing** (Phase 8): the `schema` assertion validates the JSON
   response against a JSON Schema (`file` or `inline`) — catches breaking
   changes point assertions miss. OpenAPI-driven validation is a follow-up.
+- **Snapshot testing** (Phase 9): `[snapshot]` records the response on first run
+  to a versioned `.snap` file and diffs it on later runs; `--update-snapshots`
+  re-records. Git-first regression detection.
 
 gRPC, WebSocket, JS scripting, and the desktop app are **stubs / not yet built**
 — see the roadmap (§11) in the spec.
@@ -131,6 +134,18 @@ required = ["id", "name"]
 ```
 A failed schema reports the offending path, so it surfaces breaking changes
 (missing/renamed fields, wrong types) across commits.
+
+### Snapshot testing (Phase 9)
+
+```toml
+name = "Get user"
+url = "{{baseUrl}}/users/1"
+
+[snapshot]                     # presence enables it; optional: file = "..."
+```
+First run writes `__snapshots__/<request>.snap` (canonical JSON, sorted keys);
+commit it. Later runs diff against it and fail on drift. Re-record with
+`protoglot test ... --update-snapshots`.
 
 ## Workspace
 

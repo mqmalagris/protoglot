@@ -5,11 +5,20 @@ use crate::assertions;
 use crate::capture;
 use crate::environment::{Resolver, Scope};
 use crate::error::Result;
-use crate::protocols::{self, ExecOutcome};
+use crate::protocols::{self, ExecOutcome, RawResponse};
 use crate::report::{AssertionOutcome, ExecStatus, ExecutionResult, Protocol, ResponseSummary};
-use protoglot_format::{LoadedRequest, Request};
+use crate::snapshot::{self, SnapshotResult};
+use protoglot_format::{LoadedRequest, Request, SnapshotConfig};
 use std::path::Path;
 use std::time::{Duration, Instant};
+
+/// Per-request execution context: where the request lives on disk + snapshot
+/// settings, threaded into [`Runner::run_request`].
+pub struct RunCtx<'a> {
+    pub base_dir: &'a Path,
+    pub snapshot_name: &'a str,
+    pub update_snapshots: bool,
+}
 
 /// Default per-request timeout. Without one, a dead server hangs the whole run
 /// forever — fatal for CI.
@@ -46,6 +55,8 @@ impl Default for ClientConfig {
 pub struct RunOptions {
     /// Stop at the first non-passing request.
     pub bail: bool,
+    /// Overwrite snapshots with the current response instead of diffing.
+    pub update_snapshots: bool,
 }
 
 pub struct Runner {
@@ -98,7 +109,7 @@ impl Runner {
         &self,
         request: &Request,
         scope: &mut Scope,
-        base_dir: &Path,
+        ctx: &RunCtx<'_>,
     ) -> ExecutionResult {
         let protocol = Protocol::from(request.kind());
         let name = request.name().to_string();
@@ -115,12 +126,17 @@ impl Runner {
                 let mut assertions: Vec<AssertionOutcome> = request
                     .assertions()
                     .iter()
-                    .map(|a| assertions::evaluate(a, &response, duration, base_dir))
+                    .map(|a| assertions::evaluate(a, &response, duration, ctx.base_dir))
                     .collect();
 
                 // Captures run after the response, writing into the shared scope
                 // for subsequent requests in the same run (§10).
                 capture::apply(request.captures(), &response, scope);
+
+                // Snapshot: record on first run, diff on later runs (§Phase 9).
+                if let Some(config) = request.snapshot() {
+                    assertions.push(self.snapshot_outcome(config, &response, ctx));
+                }
 
                 // GraphQL `errors` / SOAP `Fault` flip the result to Failed.
                 if let Some(msg) = protocol_failure {
@@ -184,11 +200,22 @@ impl Runner {
         &self,
         item: &LoadedRequest,
         scope: &mut Scope,
+        update_snapshots: bool,
     ) -> Vec<ExecutionResult> {
         let base_dir = item.path.parent().unwrap_or_else(|| Path::new("."));
+        let stem = item
+            .path
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .unwrap_or("snapshot");
 
         let Some(source) = item.request.data() else {
-            return vec![self.run_request(&item.request, scope, base_dir).await];
+            let ctx = RunCtx {
+                base_dir,
+                snapshot_name: stem,
+                update_snapshots,
+            };
+            return vec![self.run_request(&item.request, scope, &ctx).await];
         };
 
         let data_path = base_dir.join(&source.file);
@@ -209,7 +236,14 @@ impl Runner {
             for (k, v) in row {
                 row_scope.set(k.clone(), v.clone());
             }
-            let mut result = self.run_request(&item.request, &mut row_scope, base_dir).await;
+            // Each row snapshots to a distinct file so they don't clobber.
+            let snapshot_name = format!("{stem}-row{}", i + 1);
+            let ctx = RunCtx {
+                base_dir,
+                snapshot_name: &snapshot_name,
+                update_snapshots,
+            };
+            let mut result = self.run_request(&item.request, &mut row_scope, &ctx).await;
             result.request_name = format!("{} [row {}]", result.request_name, i + 1);
             results.push(result);
         }
@@ -228,6 +262,29 @@ impl Runner {
         }
     }
 
+    fn snapshot_outcome(
+        &self,
+        config: &SnapshotConfig,
+        response: &RawResponse,
+        ctx: &RunCtx<'_>,
+    ) -> AssertionOutcome {
+        let path = match &config.file {
+            Some(file) => ctx.base_dir.join(file),
+            None => ctx
+                .base_dir
+                .join("__snapshots__")
+                .join(format!("{}.snap", ctx.snapshot_name)),
+        };
+        let normalized = snapshot::normalize(&response.body);
+        match snapshot::check(&path, &normalized, ctx.update_snapshots) {
+            Ok(SnapshotResult::Created) => AssertionOutcome::pass("snapshot created"),
+            Ok(SnapshotResult::Updated) => AssertionOutcome::pass("snapshot updated"),
+            Ok(SnapshotResult::Match) => AssertionOutcome::pass("snapshot matches"),
+            Ok(SnapshotResult::Mismatch(diff)) => AssertionOutcome::fail("snapshot", diff),
+            Err(e) => AssertionOutcome::fail("snapshot", format!("snapshot io error: {e}")),
+        }
+    }
+
     /// Run a sequence of items in order, sharing one mutable scope.
     pub async fn run_all(
         &self,
@@ -237,7 +294,7 @@ impl Runner {
     ) -> Vec<ExecutionResult> {
         let mut results = Vec::with_capacity(items.len());
         for item in items {
-            let item_results = self.run_item(item, scope).await;
+            let item_results = self.run_item(item, scope, opts.update_snapshots).await;
             let any_failed = item_results.iter().any(|r| !r.passed());
             results.extend(item_results);
             if opts.bail && any_failed {
@@ -257,12 +314,13 @@ impl Runner {
         items: &[LoadedRequest],
         base_scope: &Scope,
         concurrency: usize,
+        update_snapshots: bool,
     ) -> Vec<ExecutionResult> {
         use futures::stream::{self, StreamExt};
         let nested: Vec<Vec<ExecutionResult>> = stream::iter(items.iter())
             .map(|item| {
                 let mut scope = base_scope.clone();
-                async move { self.run_item(item, &mut scope).await }
+                async move { self.run_item(item, &mut scope, update_snapshots).await }
             })
             .buffered(concurrency.max(1))
             .collect()
@@ -307,6 +365,7 @@ mod tests {
                 file: "ids.csv".into(),
                 format: None,
             }),
+            snapshot: None,
         });
         let item = LoadedRequest {
             path: dir.join("req.toml"),
@@ -342,6 +401,7 @@ mod tests {
                 file: "nope.csv".into(),
                 format: None,
             }),
+            snapshot: None,
         });
         let item = LoadedRequest {
             path: std::env::temp_dir().join("req.toml"),
@@ -349,7 +409,7 @@ mod tests {
         };
         let runner = Runner::new();
         let mut scope = Scope::new();
-        let results = runner.run_item(&item, &mut scope).await;
+        let results = runner.run_item(&item, &mut scope, false).await;
         assert_eq!(results.len(), 1);
         assert!(matches!(results[0].status, ExecStatus::Error));
     }

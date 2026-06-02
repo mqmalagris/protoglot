@@ -109,6 +109,7 @@ mod tests {
             capture: vec![],
             auth,
             data: None,
+            snapshot: None,
         }
     }
 

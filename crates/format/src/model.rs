@@ -96,6 +96,16 @@ impl Request {
             _ => None,
         }
     }
+
+    /// Snapshot config (§Phase 9), if declared.
+    pub fn snapshot(&self) -> Option<&SnapshotConfig> {
+        match self {
+            Request::Rest(r) => r.snapshot.as_ref(),
+            Request::Graphql(r) => r.snapshot.as_ref(),
+            Request::Soap(r) => r.snapshot.as_ref(),
+            _ => None,
+        }
+    }
 }
 
 fn default_method() -> String {
@@ -122,6 +132,8 @@ pub struct RestRequest {
     pub auth: Option<Auth>,
     #[serde(default)]
     pub data: Option<DataSource>,
+    #[serde(default)]
+    pub snapshot: Option<SnapshotConfig>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -143,6 +155,8 @@ pub struct GraphqlRequest {
     pub auth: Option<Auth>,
     #[serde(default)]
     pub data: Option<DataSource>,
+    #[serde(default)]
+    pub snapshot: Option<SnapshotConfig>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -196,6 +210,8 @@ pub struct SoapRequest {
     pub auth: Option<Auth>,
     #[serde(default)]
     pub data: Option<DataSource>,
+    #[serde(default)]
+    pub snapshot: Option<SnapshotConfig>,
 }
 
 /// Authentication for a request. Header-style schemes (`bearer`, `basic`,
@@ -302,6 +318,16 @@ pub struct DataSource {
     /// `csv` or `json`; inferred from the extension when omitted.
     #[serde(default)]
     pub format: Option<String>,
+}
+
+/// Snapshot config (§spec Phase 9). Presence of `[snapshot]` enables recording
+/// the response on first run and diffing it on later runs.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct SnapshotConfig {
+    /// Override the snapshot file path (relative to the request). Defaults to
+    /// `__snapshots__/<request-stem>.snap`.
+    #[serde(default)]
+    pub file: Option<String>,
 }
 
 /// Declarative response capture (Phase 2 wiring; parsed now).

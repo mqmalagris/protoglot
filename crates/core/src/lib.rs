@@ -14,6 +14,7 @@ pub mod protocols;
 pub mod report;
 pub mod runner;
 pub mod secrets;
+pub mod snapshot;
 pub mod xml;
 
 pub use error::{Error, Result};

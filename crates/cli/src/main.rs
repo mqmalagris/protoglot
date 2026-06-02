@@ -109,6 +109,9 @@ struct RunArgs {
     /// Re-run automatically when a file in the collection changes.
     #[arg(long)]
     watch: bool,
+    /// Overwrite snapshots with the current response instead of diffing.
+    #[arg(long = "update-snapshots")]
+    update_snapshots: bool,
     /// Inline variable override (highest precedence). Repeatable.
     #[arg(long = "var", value_name = "KEY=VALUE")]
     vars: Vec<String>,
@@ -312,10 +315,13 @@ async fn execute_once(args: &RunArgs) -> anyhow::Result<bool> {
             eprintln!("warning: captures do not propagate across requests in parallel mode");
         }
         runner
-            .run_all_concurrent(&items, &scope, args.concurrency)
+            .run_all_concurrent(&items, &scope, args.concurrency, args.update_snapshots)
             .await
     } else {
-        let opts = RunOptions { bail: args.bail };
+        let opts = RunOptions {
+            bail: args.bail,
+            update_snapshots: args.update_snapshots,
+        };
         runner.run_all(&items, &mut scope, &opts).await
     };
 

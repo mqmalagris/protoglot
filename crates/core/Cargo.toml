@@ -17,6 +17,7 @@ serde_json_path.workspace = true
 base64.workspace = true
 csv.workspace = true
 jsonschema.workspace = true
+similar.workspace = true
 aws-sigv4.workspace = true
 aws-credential-types.workspace = true
 sxd-document.workspace = true
