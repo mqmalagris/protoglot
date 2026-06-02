@@ -1,0 +1,216 @@
+:root {
+  --bg: #0f1115;
+  --panel: #171a21;
+  --border: #262b36;
+  --fg: #d7dce5;
+  --muted: #8a93a3;
+  --ok: #4ec9a3;
+  --fail: #e06c75;
+  --err: #d9a441;
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-size: 14px;
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--fg);
+}
+
+main {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+}
+
+header {
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+header h1 {
+  margin: 0 0 8px;
+  font-size: 18px;
+  letter-spacing: 0.5px;
+}
+
+.bar {
+  display: flex;
+  gap: 8px;
+}
+
+input,
+button {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  color: var(--fg);
+  border-radius: 6px;
+  padding: 7px 10px;
+  font: inherit;
+}
+
+input.grow {
+  flex: 1;
+}
+
+input.env {
+  width: 120px;
+}
+
+button {
+  cursor: pointer;
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.summary {
+  margin: 8px 0 0;
+  color: var(--muted);
+}
+.summary .ok {
+  color: var(--ok);
+}
+.summary .failed {
+  color: var(--fail);
+}
+.summary .errored {
+  color: var(--err);
+}
+
+.cols {
+  display: grid;
+  grid-template-columns: 300px 1fr;
+  flex: 1;
+  min-height: 0;
+}
+
+.list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  overflow: auto;
+  border-right: 1px solid var(--border);
+}
+
+.list li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 14px;
+  cursor: pointer;
+  border-bottom: 1px solid var(--border);
+}
+
+.list li.active {
+  background: var(--panel);
+}
+
+.list li.empty {
+  color: var(--muted);
+  cursor: default;
+}
+
+.dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--border);
+}
+.dot.ok {
+  background: var(--ok);
+}
+.dot.failed {
+  background: var(--fail);
+}
+.dot.error {
+  background: var(--err);
+}
+
+.name {
+  flex: 1;
+}
+
+.kind {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.detail {
+  padding: 16px;
+  overflow: auto;
+}
+
+.detail h2 {
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: var(--muted);
+  margin: 0 0 8px;
+}
+
+.source {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 12px;
+  overflow: auto;
+  white-space: pre-wrap;
+}
+
+.result {
+  border: 1px solid var(--border);
+  border-left-width: 3px;
+  border-radius: 6px;
+  padding: 10px 12px;
+  margin-bottom: 10px;
+}
+.result.ok {
+  border-left-color: var(--ok);
+}
+.result.failed {
+  border-left-color: var(--fail);
+}
+.result.error {
+  border-left-color: var(--err);
+}
+
+.result-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+.result-head em {
+  color: var(--muted);
+  font-style: normal;
+  font-size: 12px;
+}
+.result-head .ms {
+  margin-left: auto;
+  color: var(--muted);
+}
+
+.assertions {
+  margin: 8px 0 0;
+  padding-left: 18px;
+  list-style: none;
+}
+.assertions li {
+  color: var(--ok);
+}
+.assertions li.fail {
+  color: var(--fail);
+  white-space: pre-wrap;
+}
+
+.error {
+  color: var(--fail);
+  white-space: pre-wrap;
+}

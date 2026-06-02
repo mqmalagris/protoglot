@@ -1,6 +1,9 @@
 [workspace]
 resolver = "2"
 members = ["crates/format", "crates/core", "crates/cli"]
+# The Tauri desktop app is its own workspace (needs the WebView/Node toolchain);
+# keep it out of the core build/test.
+exclude = ["desktop/src-tauri"]
 
 [workspace.package]
 version = "0.0.1"

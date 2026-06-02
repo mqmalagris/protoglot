@@ -31,8 +31,11 @@ See [`protoglot-spec.md`](./protoglot-spec.md) for the full design.
   to a versioned `.snap` file and diffs it on later runs; `--update-snapshots`
   re-records. Git-first regression detection.
 
-gRPC, WebSocket, JS scripting, and the desktop app are **stubs / not yet built**
-— see the roadmap (§11) in the spec.
+The **desktop app** (Phase 4, Tauri v2 + Svelte 5) is scaffolded in
+[`desktop/`](./desktop) as a thin shell over `core` — run with `pnpm tauri dev`.
+
+gRPC, WebSocket, and JS scripting are **stubs / not yet built** — see the
+roadmap (§11) in the spec.
 
 ### Phase 2 syntax
 

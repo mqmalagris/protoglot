@@ -1,0 +1,20 @@
+# Independent from the root Cargo workspace (the `[workspace]` table below) so
+# the root `cargo build`/`cargo test` never needs the Tauri/WebView toolchain.
+[package]
+name = "protoglot-desktop"
+version = "0.0.1"
+edition = "2021"
+description = "protoglot desktop app (Tauri v2 + Svelte 5)"
+
+[workspace]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["full"] }
+# The whole point of Phase 4: the desktop is a thin consumer of `core`.
+protoglot-core = { path = "../../crates/core" }
