@@ -30,13 +30,16 @@ See [`protoglot-spec.md`](./protoglot-spec.md) for the full design.
 - **Snapshot testing** (Phase 9): `[snapshot]` records the response on first run
   to a versioned `.snap` file and diffs it on later runs; `--update-snapshots`
   re-records. Git-first regression detection.
+- **WebSocket** (Phase 5): a scriptable `[[steps]]` roteiro (send / expect) over
+  `tokio-tungstenite` (rustls for `wss`); frames collect into a transcript and a
+  failed `expect_contains` fails the request. Runs in CI and the desktop.
 
 The **desktop app** (Phase 4) is a native **egui** GUI in
 [`crates/desktop`](./crates/desktop) — all-Rust, no WebView/JS, calling `core`
 directly. Run with `cargo run -p protoglot-desktop`.
 
-gRPC, WebSocket, and JS scripting are **stubs / not yet built** — see the
-roadmap (§11) in the spec.
+gRPC and JS scripting are **stubs / not yet built** — see the roadmap (§11) in
+the spec.
 
 ### Phase 2 syntax
 
@@ -150,6 +153,24 @@ url = "{{baseUrl}}/users/1"
 First run writes `__snapshots__/<request>.snap` (canonical JSON, sorted keys);
 commit it. Later runs diff against it and fail on drift. Re-record with
 `protoglot test ... --update-snapshots`.
+
+### WebSocket (Phase 5)
+
+```toml
+kind = "websocket"
+name = "Echo socket"
+url = "wss://{{wsHost}}/echo"
+
+[[steps]]
+send = '{"type":"ping"}'
+
+[[steps]]
+expect_contains = "pong"
+timeout_ms = 2000
+```
+Steps run in order: `send` writes a frame, `expect_contains` waits (up to
+`timeout_ms`, default 5000) for a frame containing the substring. A missed
+expectation fails the request; received frames appear in the transcript body.
 
 ## Workspace
 
