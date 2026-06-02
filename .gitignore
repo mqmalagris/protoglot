@@ -2,12 +2,6 @@
 **/*.rs.bk
 Cargo.lock.orig
 
-# Tauri / node (desktop)
-desktop/node_modules
-desktop/dist
-desktop/src-tauri/target
-desktop/src-tauri/gen
-
 # secrets must never land in git
 *.secret
 .env

@@ -1,0 +1,17 @@
+[package]
+name = "protoglot-desktop"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "protoglot desktop app (egui, native — thin UI over core)"
+
+[[bin]]
+name = "protoglot-desktop"
+path = "src/main.rs"
+
+[dependencies]
+# Native, all-Rust UI. No WebView, no JS, no IPC — the UI calls `core` directly.
+protoglot-core.workspace = true
+tokio.workspace = true
+eframe = "0.29"
+rfd = "0.15"

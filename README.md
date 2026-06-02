@@ -31,8 +31,9 @@ See [`protoglot-spec.md`](./protoglot-spec.md) for the full design.
   to a versioned `.snap` file and diffs it on later runs; `--update-snapshots`
   re-records. Git-first regression detection.
 
-The **desktop app** (Phase 4, Tauri v2 + Svelte 5) is scaffolded in
-[`desktop/`](./desktop) as a thin shell over `core` — run with `bun run tauri dev`.
+The **desktop app** (Phase 4) is a native **egui** GUI in
+[`crates/desktop`](./crates/desktop) — all-Rust, no WebView/JS, calling `core`
+directly. Run with `cargo run -p protoglot-desktop`.
 
 gRPC, WebSocket, and JS scripting are **stubs / not yet built** — see the
 roadmap (§11) in the spec.
@@ -157,7 +158,7 @@ crates/
   format/   # pure parse/serialize of the on-disk collection (serde + toml)
   core/     # domain: protocols, runner, environment, assertions, report
   cli/      # `protoglot` binary (clap)
-desktop/     # Tauri v2 + Svelte 5 (scaffolded later)
+  desktop/  # native egui GUI (thin view over core)
 ```
 
 `core` depends on `format` (matches the §3 layering). `format` carries no
