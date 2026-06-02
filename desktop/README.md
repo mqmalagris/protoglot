@@ -18,22 +18,26 @@ desktop/
     ├── tauri.conf.json   capabilities/default.json  build.rs
 ```
 
-## Run it (needs Node + Rust + a WebView)
+## Run it (needs Bun + Rust + a WebView)
 
 ```sh
 cd desktop
-pnpm install
-pnpm tauri dev          # launches the app against the Vite dev server
+bun install
+bun run tauri dev       # launches the app against the Vite dev server
 ```
 
 Then point the path box at a collection (e.g. the repo's `examples/demo`, or one
 made with `protoglot new`), **Load**, then **Run all**.
 
+> Uses **Bun** (`beforeDevCommand`/`beforeBuildCommand` in `tauri.conf.json`).
+> To use pnpm/npm instead, swap those to `pnpm dev`/`pnpm build` and run
+> `pnpm install && pnpm tauri dev`.
+
 ## Build a bundle
 
 ```sh
-pnpm tauri icon path/to/logo.png   # generate src-tauri/icons/* (required to bundle)
-pnpm tauri build
+bun run tauri icon path/to/logo.png   # generate src-tauri/icons/* (required to bundle)
+bun run tauri build
 ```
 
 ## Status / not yet done

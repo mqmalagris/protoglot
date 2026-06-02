@@ -32,7 +32,7 @@ See [`protoglot-spec.md`](./protoglot-spec.md) for the full design.
   re-records. Git-first regression detection.
 
 The **desktop app** (Phase 4, Tauri v2 + Svelte 5) is scaffolded in
-[`desktop/`](./desktop) as a thin shell over `core` — run with `pnpm tauri dev`.
+[`desktop/`](./desktop) as a thin shell over `core` — run with `bun run tauri dev`.
 
 gRPC, WebSocket, and JS scripting are **stubs / not yet built** — see the
 roadmap (§11) in the spec.
