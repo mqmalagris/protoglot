@@ -107,6 +107,28 @@ impl Request {
             _ => None,
         }
     }
+
+    /// Pre-request JS script, if declared.
+    pub fn pre_script(&self) -> Option<&str> {
+        match self {
+            Request::Rest(r) => r.pre_script.as_deref(),
+            Request::Graphql(r) => r.pre_script.as_deref(),
+            Request::Soap(r) => r.pre_script.as_deref(),
+            Request::Grpc(r) => r.pre_script.as_deref(),
+            _ => None,
+        }
+    }
+
+    /// Post-response JS script, if declared.
+    pub fn post_script(&self) -> Option<&str> {
+        match self {
+            Request::Rest(r) => r.post_script.as_deref(),
+            Request::Graphql(r) => r.post_script.as_deref(),
+            Request::Soap(r) => r.post_script.as_deref(),
+            Request::Grpc(r) => r.post_script.as_deref(),
+            _ => None,
+        }
+    }
 }
 
 fn default_method() -> String {
@@ -135,6 +157,10 @@ pub struct RestRequest {
     pub data: Option<DataSource>,
     #[serde(default)]
     pub snapshot: Option<SnapshotConfig>,
+    #[serde(default)]
+    pub pre_script: Option<String>,
+    #[serde(default)]
+    pub post_script: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -158,6 +184,10 @@ pub struct GraphqlRequest {
     pub data: Option<DataSource>,
     #[serde(default)]
     pub snapshot: Option<SnapshotConfig>,
+    #[serde(default)]
+    pub pre_script: Option<String>,
+    #[serde(default)]
+    pub post_script: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -174,6 +204,10 @@ pub struct GrpcRequest {
     pub message: serde_json::Map<String, serde_json::Value>,
     #[serde(default)]
     pub assertions: Vec<Assertion>,
+    #[serde(default)]
+    pub pre_script: Option<String>,
+    #[serde(default)]
+    pub post_script: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -215,6 +249,10 @@ pub struct SoapRequest {
     pub data: Option<DataSource>,
     #[serde(default)]
     pub snapshot: Option<SnapshotConfig>,
+    #[serde(default)]
+    pub pre_script: Option<String>,
+    #[serde(default)]
+    pub post_script: Option<String>,
 }
 
 /// Authentication for a request. Header-style schemes (`bearer`, `basic`,

@@ -13,6 +13,7 @@ pub mod lint;
 pub mod protocols;
 pub mod report;
 pub mod runner;
+pub mod scripting;
 pub mod secrets;
 pub mod snapshot;
 pub mod xml;

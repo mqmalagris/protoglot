@@ -23,6 +23,9 @@ pub enum Error {
     #[error("data file error: {0}")]
     Data(String),
 
+    #[error("script error: {0}")]
+    Script(String),
+
     #[error("io error: {0}")]
     Io(#[from] std::io::Error),
 }

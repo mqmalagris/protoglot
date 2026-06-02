@@ -112,6 +112,8 @@ mod tests {
             auth: None,
             data: None,
             snapshot: None,
+            pre_script: None,
+            post_script: None,
         }
     }
 

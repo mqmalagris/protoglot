@@ -32,6 +32,7 @@ tracing.workspace = true
 owo-colors.workspace = true
 futures.workspace = true
 tokio-tungstenite.workspace = true
+boa_engine.workspace = true
 tonic.workspace = true
 prost.workspace = true
 prost-reflect.workspace = true

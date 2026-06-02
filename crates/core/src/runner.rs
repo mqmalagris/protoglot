@@ -114,6 +114,13 @@ impl Runner {
         let protocol = Protocol::from(request.kind());
         let name = request.name().to_string();
 
+        // Pre-request script may set variables used to template the request.
+        if let Some(pre) = request.pre_script() {
+            if let Err(e) = crate::scripting::run_pre(pre, scope) {
+                return self.error_result(request, format!("pre-script: {e}"));
+            }
+        }
+
         let started = Instant::now();
         let outcome = self.execute(request, scope, ctx.base_dir).await;
         let duration = started.elapsed();
@@ -132,6 +139,21 @@ impl Runner {
                 // Captures run after the response, writing into the shared scope
                 // for subsequent requests in the same run (§10).
                 capture::apply(request.captures(), &response, scope);
+
+                // Post-response script: pg.assert(...) outcomes + var changes.
+                if let Some(post) = request.post_script() {
+                    let body = response.text();
+                    let resp = crate::scripting::ScriptResponse {
+                        status: response.status,
+                        body: &body,
+                    };
+                    match crate::scripting::run_post(post, &resp, scope) {
+                        Ok(mut outs) => assertions.append(&mut outs),
+                        Err(e) => {
+                            assertions.push(AssertionOutcome::fail("post-script", e.to_string()))
+                        }
+                    }
+                }
 
                 // Snapshot: record on first run, diff on later runs (§Phase 9).
                 if let Some(config) = request.snapshot() {
@@ -373,6 +395,8 @@ mod tests {
                 format: None,
             }),
             snapshot: None,
+            pre_script: None,
+            post_script: None,
         });
         let item = LoadedRequest {
             path: dir.join("req.toml"),
@@ -409,6 +433,8 @@ mod tests {
                 format: None,
             }),
             snapshot: None,
+            pre_script: None,
+            post_script: None,
         });
         let item = LoadedRequest {
             path: std::env::temp_dir().join("req.toml"),

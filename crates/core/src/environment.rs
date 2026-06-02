@@ -46,6 +46,15 @@ impl Scope {
     pub fn get(&self, key: &str) -> Option<&str> {
         self.vars.get(key).map(String::as_str)
     }
+
+    /// A stable (sorted) copy of all variables — used to hand the scope to a JS
+    /// script and merge changes back.
+    pub fn snapshot(&self) -> std::collections::BTreeMap<String, String> {
+        self.vars
+            .iter()
+            .map(|(k, v)| (k.clone(), v.clone()))
+            .collect()
+    }
 }
 
 fn template_re() -> &'static Regex {

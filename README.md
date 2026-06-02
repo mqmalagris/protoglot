@@ -33,6 +33,10 @@ See [`protoglot-spec.md`](./protoglot-spec.md) for the full design.
 - **WebSocket** (Phase 5): a scriptable `[[steps]]` roteiro (send / expect) over
   `tokio-tungstenite` (rustls for `wss`); frames collect into a transcript and a
   failed `expect_contains` fails the request. Runs in CI and the desktop.
+- **JS scripting** (Phase 10): `pre_script` / `post_script` via `boa_engine`
+  (pure-Rust JS). A small `pg` API: `pg.get/set` (vars), and in post
+  `pg.response.{status,body,json}` + `pg.assert(name, cond)`. For HMAC/signing a
+  Rust-backed crypto helper is still pending (boa has no crypto).
 - **gRPC** (Phase 6): **dynamic** unary invocation — descriptors from a
   runtime-compiled `.proto` (`protox`) **or server reflection** (v1, v1alpha
   fallback); a custom tonic codec ferries `DynamicMessage`s. The JSON `[message]`
@@ -43,7 +47,9 @@ The **desktop app** (Phase 4) is a native **egui** GUI in
 [`crates/desktop`](./crates/desktop) — all-Rust, no WebView/JS, calling `core`
 directly. Run with `cargo run -p protoglot-desktop`.
 
-JS scripting is **not yet built** — see the roadmap (§11) in the spec.
+All roadmap protocols (REST/GraphQL/SOAP/WebSocket/gRPC) + testing tracks +
+auth + DX + desktop + JS scripting are implemented — see the roadmap (§11) in
+the spec for the remaining refinements.
 
 ### Phase 2 syntax
 
@@ -196,6 +202,25 @@ exists = true
 ```
 Unary only for now; the reply is converted to JSON so the usual assertions
 apply. A gRPC status error (e.g. `NotFound`) fails the request.
+
+### JS scripting (Phase 10)
+
+```toml
+name = "Scripted"
+url = "{{baseUrl}}/todos/{{id}}"
+
+# Runs before the request; set vars used in templating.
+pre_script = "pg.set('id', 2);"
+
+# Runs after; assert on the response and capture values for later requests.
+post_script = """
+pg.assert('ok', pg.response.status === 200);
+pg.set('title', pg.response.json.title);
+"""
+```
+`pg.assert(name, cond)` outcomes show up as `script: <name>` in the report.
+Pure-Rust JS (boa) — no `fetch`/`require`, and no crypto yet (a Rust-backed
+`pg.hmac` for signing is a follow-up).
 
 ## Workspace
 

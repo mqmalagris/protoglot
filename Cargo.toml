@@ -43,6 +43,7 @@ clap = { version = "4", features = ["derive"] }
 owo-colors = "4"
 futures = "0.3"
 notify = "6"
+boa_engine = "0.20"
 
 # internal crates
 protoglot-format = { path = "crates/format" }

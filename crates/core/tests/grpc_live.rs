@@ -35,6 +35,8 @@ async fn dynamic_unary_via_proto_against_live_server() {
         proto: Some("echo.proto".into()),
         message,
         assertions: vec![],
+        pre_script: None,
+        post_script: None,
     };
 
     let out = grpc::execute(&req, &Scope::new(), &Resolver::new(), &dir)
@@ -66,6 +68,8 @@ async fn dynamic_unary_via_reflection_against_live_server() {
         proto: None,
         message,
         assertions: vec![],
+        pre_script: None,
+        post_script: None,
     };
 
     let out = grpc::execute(&req, &Scope::new(), &Resolver::new(), std::path::Path::new("."))
