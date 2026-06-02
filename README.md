@@ -111,12 +111,20 @@ cargo test
 
 ```sh
 protoglot new <name>                              # scaffold a runnable collection
-protoglot run <path> [--env <name>] [--var k=v]...
+protoglot run  <path> [--env <name>] [--var k=v]...
 protoglot test <path> --reporter junit > results.xml
+protoglot codegen <file> --as curl|fetch|reqwest  # export a request
+protoglot lint <path>                             # flag hardcoded secrets
 ```
 
 `protoglot new myapi && protoglot test myapi` is green out of the box (the
 sample request hits jsonplaceholder).
+
+**run / test flags:** `--env <name>`, `--reporter pretty|json|junit|tap`,
+`--bail`, `--var k=v` (repeatable), `--timeout <secs>` (default 30, 0 disables),
+`--concurrency <N>` (parallel; captures don't propagate when > 1),
+`--watch` (re-run on `.toml` change), `--http-version auto|1|2`.
+Exit code ≠ 0 if any assertion fails — CI breaks the build.
 
 Reporters: `pretty` (default), `json`, `junit`, `tap`. Exit code is non-zero if
 any assertion fails — so CI breaks the build.

@@ -4,6 +4,7 @@ use anyhow::{anyhow, bail, Context};
 use clap::{Args, Parser, Subcommand, ValueEnum};
 use protoglot_core::codegen;
 use protoglot_core::environment::Scope;
+use protoglot_core::lint;
 use protoglot_core::format::{self, VarMap};
 use protoglot_core::report::{self, Reporter};
 use protoglot_core::runner::{ClientConfig, HttpVersion, RunOptions, Runner};
@@ -32,6 +33,14 @@ enum Command {
     New(NewArgs),
     /// Export a request as a curl / fetch / reqwest snippet.
     Codegen(CodegenArgs),
+    /// Scan a collection for hardcoded credentials (secrets hygiene).
+    Lint(LintArgs),
+}
+
+#[derive(Args)]
+struct LintArgs {
+    /// Path to a request file, folder, or collection root.
+    path: PathBuf,
 }
 
 #[derive(Args)]
@@ -183,8 +192,90 @@ async fn main() {
                 2
             }
         },
+        Command::Lint(args) => match lint_cmd(args) {
+            Ok(found) => {
+                if found {
+                    1
+                } else {
+                    0
+                }
+            }
+            Err(e) => {
+                eprintln!("error: {e:#}");
+                2
+            }
+        },
     };
     std::process::exit(code);
+}
+
+/// Returns `true` if any hygiene issue was found.
+fn lint_cmd(args: &LintArgs) -> anyhow::Result<bool> {
+    let mut total = 0usize;
+
+    let items = format::collect_requests(&args.path)
+        .with_context(|| format!("loading requests from {}", args.path.display()))?;
+    for item in &items {
+        total += report_findings(&item.path, &lint::lint_request(&item.request));
+    }
+
+    let mut env_files = Vec::new();
+    find_env_files(&args.path, &mut env_files);
+    env_files.sort();
+    for path in &env_files {
+        let vars = format::load_environment(path)
+            .with_context(|| format!("loading environment {}", path.display()))?;
+        total += report_findings(path, &lint::lint_env(&vars));
+    }
+
+    if total == 0 {
+        println!("no secrets-hygiene issues found");
+    } else {
+        println!("\n{total} issue(s) found");
+    }
+    Ok(total > 0)
+}
+
+fn report_findings(path: &Path, findings: &[lint::Finding]) -> usize {
+    if findings.is_empty() {
+        return 0;
+    }
+    println!("{}", path.display());
+    for f in findings {
+        println!("  {}: {}", f.location, f.message);
+    }
+    findings.len()
+}
+
+fn find_env_files(path: &Path, out: &mut Vec<PathBuf>) {
+    let root = if path.is_dir() {
+        path.to_path_buf()
+    } else {
+        path.parent()
+            .filter(|p| !p.as_os_str().is_empty())
+            .unwrap_or(Path::new("."))
+            .to_path_buf()
+    };
+    collect_env_files(&root, out);
+}
+
+fn collect_env_files(dir: &Path, out: &mut Vec<PathBuf>) {
+    let Ok(entries) = fs::read_dir(dir) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let p = entry.path();
+        if p.is_dir() {
+            collect_env_files(&p, out);
+        } else if p.extension().and_then(|x| x.to_str()) == Some("toml")
+            && p.parent()
+                .and_then(|d| d.file_name())
+                .and_then(|n| n.to_str())
+                == Some("environments")
+        {
+            out.push(p);
+        }
+    }
 }
 
 fn codegen_cmd(args: &CodegenArgs) -> anyhow::Result<()> {
