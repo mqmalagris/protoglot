@@ -4417,7 +4417,7 @@ checksum = "95067976aca6421a523e491fce939a3e65249bac4b977adee0ee9771568e8aa3"
 
 [[package]]
 name = "protoglot-cli"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "anyhow",
  "clap",
@@ -4430,7 +4430,7 @@ dependencies = [
 
 [[package]]
 name = "protoglot-core"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "aws-credential-types",
  "aws-sigv4",
@@ -4467,7 +4467,7 @@ dependencies = [
 
 [[package]]
 name = "protoglot-desktop"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "eframe",
  "protoglot-core",
@@ -4478,7 +4478,7 @@ dependencies = [
 
 [[package]]
 name = "protoglot-format"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "serde",
  "serde_json",
