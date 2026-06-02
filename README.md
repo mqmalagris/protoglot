@@ -42,16 +42,31 @@ protoglot test myapi     # run it — exits non-zero if anything fails
 
 ## Install
 
-**Prebuilt binary** — download the archive for your platform from
-[Releases](https://github.com/mqmalagris/protoglot/releases), extract, and put
-`protoglot` on your `PATH`. Every release carries SLSA build provenance
-([verify it](#releases--provenance)).
+> `protoglot` is a command-line tool — run it from a terminal, not by
+> double-clicking. Installs as both `protoglot` and the short alias `pglot`.
+
+**One-liner** (downloads the latest release for your platform):
+
+```sh
+# macOS / Linux
+curl -fsSL https://raw.githubusercontent.com/mqmalagris/protoglot/main/install.sh | sh
+```
+
+```powershell
+# Windows (PowerShell)
+irm https://raw.githubusercontent.com/mqmalagris/protoglot/main/install.ps1 | iex
+```
 
 **With Cargo:**
 
 ```sh
 cargo install --git https://github.com/mqmalagris/protoglot protoglot-cli
 ```
+
+**Manual** — download the archive for your platform from
+[Releases](https://github.com/mqmalagris/protoglot/releases), extract, and put
+`protoglot` on your `PATH`. Every release carries SLSA build provenance
+([verify it](#releases--provenance)).
 
 **From source:**
 
