@@ -1,61 +1,144 @@
 # protoglot
 
 [![CI](https://github.com/mqmalagris/protoglot/actions/workflows/ci.yml/badge.svg)](https://github.com/mqmalagris/protoglot/actions/workflows/ci.yml)
+[![License](https://img.shields.io/badge/license-MIT%2FApache--2.0-blue)](#license)
 
-Local-first, git-friendly multiprotocol API client in Rust — a first-class CLI
-plus a native desktop app, over one collection format.
+**A local-first, git-friendly API client that speaks REST, GraphQL, SOAP,
+WebSocket, and gRPC — with a first-class CLI for CI/CD and a native desktop app.**
+Written in Rust.
 
-> Bruno's git+CLI portability × Postman's protocol breadth.
+> The portability of [Bruno](https://www.usebruno.com/) (plain-text collections
+> in git, a real CLI) with the protocol breadth of Postman (including gRPC and
+> SOAP) — no account, no cloud, no lock-in.
 
-## Status
+```sh
+protoglot new myapi      # scaffold a collection
+protoglot test myapi     # run it — exits non-zero if anything fails
+```
 
-Implemented:
+## Why
 
-- Workspace, TOML collection format, `core` runner, the `protoglot` CLI with
-  `pretty`/`json`/`junit`/`tap` reporters and CI exit codes (Phase 0–1).
-- REST execution + declarative assertions: `status`, `jsonpath`, `xpath`,
-  `header`, `response_time`, `body_contains` (Phase 1–2).
-- **GraphQL** (POST `{query, variables}`; non-empty `errors` ⇒ failure even on
-  HTTP 200) and **SOAP** (XML envelope, `SOAPAction`; `<Fault>` ⇒ failure),
-  reusing the REST/HTTP layer (Phase 2).
-- **`[[capture]]`** — pull a value (jsonpath/xpath) from a response into the run
-  scope for later requests; covers auth-chaining without a JS engine (Phase 2).
-- **Auth** (Phase 3): `bearer`, `basic`, `oauth2_client_credentials` (header
-  schemes, any HTTP protocol), `aws_sigv4` request signing and `mtls` client
-  certs (REST). OAuth2 authorization-code + PKCE is the remaining follow-up.
-- **Data-driven** (Phase 7): `[data]` iterates a request over each row of a
-  CSV/JSON file; columns/keys become variables for that row.
-- **Contract testing** (Phase 8): the `schema` assertion validates the JSON
-  response against a JSON Schema (`file` or `inline`) — catches breaking
-  changes point assertions miss. OpenAPI-driven validation is a follow-up.
-- **Snapshot testing** (Phase 9): `[snapshot]` records the response on first run
-  to a versioned `.snap` file and diffs it on later runs; `--update-snapshots`
-  re-records. Git-first regression detection.
-- **WebSocket** (Phase 5): a scriptable `[[steps]]` roteiro (send / expect) over
-  `tokio-tungstenite` (rustls for `wss`); frames collect into a transcript and a
-  failed `expect_contains` fails the request. Runs in CI and the desktop.
-- **JS scripting** (Phase 10): `pre_script` / `post_script` via `boa_engine`
-  (pure-Rust JS). A small `pg` API: `pg.get/set` (vars), and in post
-  `pg.response.{status,body,json}` + `pg.assert(name, cond)`. For HMAC/signing a
-  Rust-backed crypto helper is still pending (boa has no crypto).
-- **gRPC** (Phase 6): **dynamic** unary invocation — descriptors from a
-  runtime-compiled `.proto` (`protox`) **or server reflection** (v1, v1alpha
-  fallback); a custom tonic codec ferries `DynamicMessage`s. The JSON `[message]`
-  becomes the request; the reply serializes back to JSON so jsonpath assertions
-  apply. Streaming/TLS pending.
+- **Local-first & git-friendly.** Collections are plain TOML files — one request
+  per file in a folder tree. Diff them, review them in PRs, branch them. No
+  exported JSON blobs, no account, no sync service.
+- **CLI-first.** The exact collection you use at your desk runs in CI with
+  JUnit/TAP output and proper exit codes — a free, multiprotocol equivalent of
+  Newman.
+- **Truly multiprotocol.** REST, GraphQL, SOAP, WebSocket, and *dynamic* gRPC all
+  share one collection format and one assertion engine.
+- **One core, thin shells.** All the logic lives in a Rust `core` library; the
+  CLI and desktop app are thin layers over it, so what runs on your machine is
+  literally the same engine that runs in CI.
 
-The **desktop app** (Phase 4) is a native **egui** GUI in
-[`crates/desktop`](./crates/desktop) — all-Rust, no WebView/JS, calling `core`
-directly. Run with `cargo run -p protoglot-desktop`.
+| | Git-friendly | First-class CLI | Broad protocols | Local-first |
+|---|---|---|---|---|
+| Postman | ❌ | Newman (paid/limited) | ✅ | ❌ |
+| Bruno | ✅ | ✅ | ⚠️ REST/GraphQL | ✅ |
+| **protoglot** | ✅ | ✅ | ✅ (incl. gRPC/SOAP) | ✅ |
 
-All roadmap protocols (REST/GraphQL/SOAP/WebSocket/gRPC) + testing tracks +
-auth + DX + desktop + JS scripting are implemented — see the roadmap (§11) in
-the spec for the remaining refinements.
+> **Status:** early — `v0.1.0`. The protocols, assertions, auth, and CI tooling
+> described below work and are covered by tests; some refinements are still in
+> flight.
 
-### Phase 2 syntax
+## Install
+
+**Prebuilt binary** — download the archive for your platform from
+[Releases](https://github.com/mqmalagris/protoglot/releases), extract, and put
+`protoglot` on your `PATH`. Every release carries SLSA build provenance
+([verify it](#releases--provenance)).
+
+**With Cargo:**
+
+```sh
+cargo install --git https://github.com/mqmalagris/protoglot protoglot-cli
+```
+
+**From source:**
+
+```sh
+git clone https://github.com/mqmalagris/protoglot
+cd protoglot
+cargo build --release -p protoglot-cli   # → target/release/protoglot
+```
+
+## Quickstart
+
+```sh
+protoglot new myapi
+protoglot test myapi
+```
+
+```
+✓ Get example [rest] 200 (47ms)
+    ✓ status == 200
+    ✓ jsonpath $.title
+
+1 passed, 0 failed, 0 errored
+```
+
+`protoglot new` writes a runnable sample collection; edit it, add your requests,
+point it at your API.
+
+## Collections
+
+A collection is a directory of TOML files — one request per file — in whatever
+folder structure you like:
+
+```
+myapi/
+├── protoglot.toml          # collection config + variables
+├── environments/
+│   ├── local.toml
+│   └── staging.toml
+└── users/
+    ├── get-user.toml
+    └── create-user.toml
+```
+
+A REST request:
 
 ```toml
-# GraphQL
+name = "Get user"
+method = "GET"
+url = "{{baseUrl}}/users/{{userId}}"
+
+[headers]
+Authorization = "Bearer {{token}}"
+
+[[assertions]]
+type = "status"
+equals = 200
+
+[[assertions]]
+type = "jsonpath"
+path = "$.id"
+exists = true
+```
+
+Variables resolve with precedence **`--var` > environment > collection**. Dynamic
+values are available too: `{{$uuid}}`, `{{$timestamp}}`, and `{{$secret:NAME}}`
+(read from the environment, never written to disk).
+
+## Assertions & capture
+
+Assertion types: `status`, `jsonpath`, `xpath` (with namespace registration),
+`header`, `response_time`, `body_contains`, and `schema` (JSON Schema —
+[contract testing](#contract-testing)).
+
+`[[capture]]` pulls a value out of a response into the run scope so later
+requests can use it — auth chaining without any scripting:
+
+```toml
+[[capture]]
+var = "authToken"
+jsonpath = "$.token"
+```
+
+## Protocols
+
+**GraphQL** — a non-empty `errors` array fails the request even on HTTP 200:
+
+```toml
 kind = "graphql"
 name = "Fetch user"
 url = "{{baseUrl}}/graphql"
@@ -68,8 +151,10 @@ path = "$.data.user.name"
 exists = true
 ```
 
+**SOAP** — XML envelope with a namespace-aware `xpath` assertion (`<Fault>` ⇒
+failure):
+
 ```toml
-# SOAP — with a namespace-aware xpath assertion
 kind = "soap"
 name = "GetRate"
 url = "{{soapHost}}/CurrencyService.asmx"
@@ -79,17 +164,54 @@ body = """<soap:Envelope ...>...</soap:Envelope>"""
 type = "xpath"
 path = "//t:GetRateResult"
 exists = true
-[assertions.namespaces]      # prefixes must be registered or the query won't match
+[assertions.namespaces]
 t = "http://tempuri.org/"
 ```
 
-### Auth (Phase 3)
+**WebSocket** — a scriptable send/expect roteiro (works in CI and the desktop):
+
+```toml
+kind = "websocket"
+name = "Echo socket"
+url = "wss://{{wsHost}}/echo"
+[[steps]]
+send = '{"type":"ping"}'
+[[steps]]
+expect_contains = "pong"
+timeout_ms = 2000
+```
+
+**gRPC** — *dynamic* invocation, no codegen: descriptors come from a
+runtime-compiled `.proto` **or** server reflection. The reply is converted to
+JSON so the usual assertions apply.
+
+```toml
+kind = "grpc"
+name = "GetUser"
+target = "{{grpcHost}}:50051"
+service = "user.v1.UserService"
+method = "GetUser"
+proto = "./protos/user.proto"      # or omit and set: schema = "reflection"
+[message]
+id = "{{userId}}"
+[[assertions]]
+type = "jsonpath"
+path = "$.name"
+exists = true
+```
+
+## Auth
+
+Add an `[auth]` block to a request. Header schemes (`bearer`, `basic`,
+`oauth2_client_credentials`) work on any HTTP protocol; `aws_sigv4` request
+signing and `mtls` client certificates apply to REST.
 
 ```toml
 [auth]
 type = "bearer"
 token = "{{$secret:api_token}}"
 ```
+
 ```toml
 [auth]
 type = "oauth2_client_credentials"
@@ -98,6 +220,7 @@ client_id = "{{clientId}}"
 client_secret = "{{$secret:client_secret}}"
 scopes = ["api.read", "api.write"]
 ```
+
 ```toml
 [auth]
 type = "aws_sigv4"
@@ -105,181 +228,123 @@ access_key_id = "{{AWS_ACCESS_KEY_ID}}"
 secret_access_key = "{{$secret:aws_secret}}"
 region = "us-east-1"
 service = "execute-api"
-# session_token = "{{AWS_SESSION_TOKEN}}"   # optional
-```
-```toml
-[auth]
-type = "mtls"
-pem = "./client-bundle.pem"   # or: cert = "...", key = "..."
 ```
 
-### Data-driven (Phase 7)
+## Testing features
+
+**Data-driven** — run a request once per row of a CSV/JSON dataset; columns
+become variables:
 
 ```toml
 name = "Get user"
 url = "{{baseUrl}}/users/{{id}}"
-
 [data]
-file = "users.csv"     # relative to this request; format inferred (csv|json)
-
-[[assertions]]
-type = "status"
-equals = 200
+file = "users.csv"     # format inferred from the extension (csv | json)
 ```
-`users.csv` (header row = variable names):
-```csv
-id,name
-1,ada
-2,grace
-```
-Runs the request once per row (`Get user [row 1]`, `[row 2]`, …), with `{{id}}`
-and `{{name}}` bound from each row. JSON datasets are an array of objects.
 
-### Contract testing (Phase 8)
+**Contract testing** — validate the JSON response against a JSON Schema; catches
+breaking changes (missing/renamed fields, wrong types) that point assertions
+miss:
 
 ```toml
 [[assertions]]
 type = "schema"
-file = "schemas/user.json"   # JSON Schema, relative to the request
+file = "schemas/user.json"   # or an inline [assertions.inline] schema
 ```
-Or inline:
-```toml
-[[assertions]]
-type = "schema"
-[assertions.inline]
-type = "object"
-required = ["id", "name"]
-```
-A failed schema reports the offending path, so it surfaces breaking changes
-(missing/renamed fields, wrong types) across commits.
 
-### Snapshot testing (Phase 9)
+**Snapshot testing** — record a response and diff it on later runs. Snapshots are
+versioned `.snap` files (canonical JSON), so regressions show up in your diff:
 
 ```toml
-name = "Get user"
-url = "{{baseUrl}}/users/1"
-
-[snapshot]                     # presence enables it; optional: file = "..."
+[snapshot]   # presence enables it
 ```
-First run writes `__snapshots__/<request>.snap` (canonical JSON, sorted keys);
-commit it. Later runs diff against it and fail on drift. Re-record with
-`protoglot test ... --update-snapshots`.
 
-### WebSocket (Phase 5)
+First run writes `__snapshots__/<request>.snap`; commit it. Re-record with
+`protoglot test … --update-snapshots`.
+
+## Scripting
+
+For the cases declarative config can't cover, add a `pre_script` (runs before the
+request) or `post_script` (runs after) — pure-Rust JavaScript via
+[boa](https://github.com/boa-dev/boa):
 
 ```toml
-kind = "websocket"
-name = "Echo socket"
-url = "wss://{{wsHost}}/echo"
-
-[[steps]]
-send = '{"type":"ping"}'
-
-[[steps]]
-expect_contains = "pong"
-timeout_ms = 2000
-```
-Steps run in order: `send` writes a frame, `expect_contains` waits (up to
-`timeout_ms`, default 5000) for a frame containing the substring. A missed
-expectation fails the request; received frames appear in the transcript body.
-
-### gRPC (Phase 6)
-
-```toml
-kind = "grpc"
-name = "GetUser"
-target = "{{grpcHost}}:50051"      # plaintext h2
-service = "user.v1.UserService"
-method = "GetUser"
-proto = "./protos/user.proto"      # runtime-compiled. Or omit + schema = "reflection"
-
-[message]                          # request body, as JSON; {{vars}} resolved
-id = "{{userId}}"
-
-[[assertions]]                     # run against the reply (serialized to JSON)
-type = "jsonpath"
-path = "$.name"
-exists = true
-```
-Unary only for now; the reply is converted to JSON so the usual assertions
-apply. A gRPC status error (e.g. `NotFound`) fails the request.
-
-### JS scripting (Phase 10)
-
-```toml
-name = "Scripted"
-url = "{{baseUrl}}/todos/{{id}}"
-
-# Runs before the request; set vars used in templating.
 pre_script = "pg.set('id', 2);"
-
-# Runs after; assert on the response and capture values for later requests.
 post_script = """
 pg.assert('ok', pg.response.status === 200);
 pg.set('title', pg.response.json.title);
 """
 ```
-`pg.assert(name, cond)` outcomes show up as `script: <name>` in the report.
-Pure-Rust JS (boa) — no `fetch`/`require`, and no crypto yet (a Rust-backed
-`pg.hmac` for signing is a follow-up).
 
-## Workspace
+`pg.get/set` read and write run variables; in `post_script`,
+`pg.response.{status,body,json}` exposes the response and `pg.assert(name, cond)`
+adds a checked assertion.
+
+## CI/CD
+
+The whole point of the CLI: run the same collection in your pipeline.
+
+```yaml
+- run: protoglot test ./api-tests --env ci --reporter junit > junit.xml
+- uses: mikepenz/action-junit-report@v5
+  with: { report_paths: junit.xml }
+```
+
+The exit code is non-zero if any assertion fails, so the build breaks on its own.
+
+## CLI reference
 
 ```
-crates/
-  format/   # pure parse/serialize of the on-disk collection (serde + toml)
-  core/     # domain: protocols, runner, environment, assertions, report
-  cli/      # `protoglot` binary (clap)
-  desktop/  # native egui GUI (thin view over core)
+protoglot new  <name>                              scaffold a runnable collection
+protoglot run  <path>                              execute a request / folder / collection
+protoglot test <path>                              same, intended for CI
+protoglot codegen <file> --as curl|fetch|reqwest   export a request as a snippet
+protoglot lint <path>                              flag hardcoded secrets
 ```
 
-`core` depends on `format` (matches the §3 layering). `format` carries no
-execution runtime so it can be reused by external tools (editor plugins, etc.).
+`run` / `test` flags: `--env <name>`, `--reporter pretty|json|junit|tap`,
+`--var key=value` (repeatable), `--bail`, `--timeout <secs>`,
+`--concurrency <N>`, `--watch` (re-run on change), `--http-version auto|1|2`,
+`--update-snapshots`.
 
-## Build & test
+There's a runnable example collection in [`examples/demo`](./examples/demo).
+
+## Desktop app
+
+A native [egui](https://github.com/emilk/egui) GUI — all Rust, no web view —
+that drives the same engine as the CLI: pick a collection, run it, browse
+results, and edit request source with TOML highlighting and save-back.
 
 ```sh
-cargo build
-cargo test
+cargo run -p protoglot-desktop
 ```
-
-## CLI
-
-```sh
-protoglot new <name>                              # scaffold a runnable collection
-protoglot run  <path> [--env <name>] [--var k=v]...
-protoglot test <path> --reporter junit > results.xml
-protoglot codegen <file> --as curl|fetch|reqwest  # export a request
-protoglot lint <path>                             # flag hardcoded secrets
-```
-
-`protoglot new myapi && protoglot test myapi` is green out of the box (the
-sample request hits jsonplaceholder).
-
-**run / test flags:** `--env <name>`, `--reporter pretty|json|junit|tap`,
-`--bail`, `--var k=v` (repeatable), `--timeout <secs>` (default 30, 0 disables),
-`--concurrency <N>` (parallel; captures don't propagate when > 1),
-`--watch` (re-run on `.toml` change), `--http-version auto|1|2`.
-Exit code ≠ 0 if any assertion fails — CI breaks the build.
-
-Reporters: `pretty` (default), `json`, `junit`, `tap`. Exit code is non-zero if
-any assertion fails — so CI breaks the build.
-
-There is a runnable example collection in [`examples/demo`](./examples/demo).
 
 ## Releases & provenance
 
 Tagging `vX.Y.Z` builds the `protoglot` CLI for Linux, macOS (x86_64 + arm64),
-and Windows, publishes a GitHub Release with the archives, and generates **SLSA
-build provenance** (Sigstore-signed, via GitHub artifact attestations).
-
-Verify a downloaded artifact's provenance:
+and Windows, publishes a GitHub Release with the archives, and attaches **SLSA
+build provenance** (Sigstore-signed, via GitHub artifact attestations). Verify a
+downloaded artifact:
 
 ```sh
 gh attestation verify protoglot-vX.Y.Z-<target>.tar.gz --repo mqmalagris/protoglot
 ```
 
+## Project layout
+
+```
+crates/
+  format/    on-disk collection format (parse/serialize; no runtime)
+  core/      the engine: protocols, runner, environment, assertions, reporting
+  cli/       the `protoglot` binary
+  desktop/   native egui app (thin view over core)
+```
+
+Build and test everything with `cargo build` / `cargo test`. (The desktop crate
+needs GUI system libraries; on headless machines, `cargo test --workspace
+--exclude protoglot-desktop`.)
+
 ## License
 
-Dual-licensed under either of [MIT](./LICENSE-MIT) or
-[Apache-2.0](./LICENSE-APACHE) at your option.
+Dual-licensed under either [MIT](./LICENSE-MIT) or [Apache-2.0](./LICENSE-APACHE)
+at your option.
