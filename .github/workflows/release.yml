@@ -21,8 +21,10 @@ jobs:
       matrix:
         include:
           - { os: ubuntu-latest, target: x86_64-unknown-linux-gnu }
-          - { os: macos-13, target: x86_64-apple-darwin }
+          # Both macOS targets build on the Apple-Silicon runner (x86_64 is
+          # cross-compiled) — avoids the scarce, slow macos-13 Intel runners.
           - { os: macos-latest, target: aarch64-apple-darwin }
+          - { os: macos-latest, target: x86_64-apple-darwin }
           - { os: windows-latest, target: x86_64-pc-windows-msvc }
     steps:
       - uses: actions/checkout@v4
