@@ -3,7 +3,10 @@ name = "protoglot-cli"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "protoglot command-line interface"
+repository.workspace = true
+description = "Local-first, git-friendly multiprotocol API client (REST/GraphQL/SOAP/WebSocket/gRPC) with a CI-first CLI"
+keywords = ["api", "http", "grpc", "graphql", "cli"]
+categories = ["command-line-utilities", "development-tools::testing"]
 
 [[bin]]
 name = "protoglot"

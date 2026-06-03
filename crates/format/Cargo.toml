@@ -3,7 +3,10 @@ name = "protoglot-format"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+repository.workspace = true
 description = "On-disk collection format (parse/serialize) for protoglot"
+keywords = ["api", "toml", "protoglot"]
+categories = ["parsing", "development-tools::testing"]
 
 [lib]
 name = "protoglot_format"
