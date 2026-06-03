@@ -57,10 +57,16 @@ curl -fsSL https://raw.githubusercontent.com/mqmalagris/protoglot/main/install.s
 irm https://raw.githubusercontent.com/mqmalagris/protoglot/main/install.ps1 | iex
 ```
 
+**With npm** (downloads the prebuilt binary):
+
+```sh
+npm i -g protoglot
+```
+
 **With Cargo:**
 
 ```sh
-cargo install --git https://github.com/mqmalagris/protoglot protoglot-cli
+cargo install protoglot-cli
 ```
 
 **Manual** — download the archive for your platform from
