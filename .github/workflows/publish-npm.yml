@@ -1,0 +1,34 @@
+name: Publish to npm
+
+# Publishes the npm wrapper package via npm Trusted Publishing (OIDC) — no
+# stored token. Configure the trusted publisher on npmjs first:
+#   npmjs.com → package protoglot → Settings → Publishing access →
+#   Trusted Publisher → GitHub Actions → mqmalagris/protoglot, workflow
+#   publish-npm.yml.
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write # OIDC for trusted publishing + npm provenance
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+      # Trusted publishing needs npm >= 11.5.1.
+      - run: npm install -g npm@latest
+      - name: Set version from tag
+        if: startsWith(github.ref, 'refs/tags/v')
+        working-directory: npm
+        run: npm version "${GITHUB_REF_NAME#v}" --no-git-tag-version --allow-same-version
+      - name: Publish
+        working-directory: npm
+        run: npm publish --provenance --access public
