@@ -3,7 +3,10 @@ name = "protoglot-core"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+repository.workspace = true
 description = "Domain core for protoglot: protocols, runner, assertions, reporting"
+keywords = ["api", "http", "grpc", "testing"]
+categories = ["development-tools::testing", "network-programming"]
 
 [lib]
 name = "protoglot_core"

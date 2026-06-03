@@ -45,9 +45,9 @@ futures = "0.3"
 notify = "6"
 boa_engine = "0.20"
 
-# internal crates
-protoglot-format = { path = "crates/format" }
-protoglot-core = { path = "crates/core" }
+# internal crates — version required for crates.io publish (^0.1.2 covers 0.1.x).
+protoglot-format = { path = "crates/format", version = "0.1.2" }
+protoglot-core = { path = "crates/core", version = "0.1.2" }
 
 [profile.release]
 strip = true
