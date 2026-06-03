@@ -1,8 +1,10 @@
 name: Publish to crates.io
 
-# Manual trigger — run from the Actions tab when you want to publish the current
-# main to crates.io. Publishes in dependency order (format → core → cli).
+# Publishes to crates.io in dependency order (format → core → cli) — on a
+# version tag (alongside the binary release), or manually from the Actions tab.
 on:
+  push:
+    tags: ["v*"]
   workflow_dispatch:
 
 permissions:
