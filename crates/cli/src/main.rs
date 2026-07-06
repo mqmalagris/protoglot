@@ -39,8 +39,9 @@ enum Command {
 
 #[derive(Args)]
 struct LintArgs {
-    /// Path to a request file, folder, or collection root.
-    path: PathBuf,
+    /// Path to a request file, folder, or collection root
+    /// [default: ./.protoglot, else . if it has a protoglot.toml].
+    path: Option<PathBuf>,
 }
 
 #[derive(Args)]
@@ -77,17 +78,21 @@ impl From<TargetArg> for codegen::Target {
 
 #[derive(Args)]
 struct NewArgs {
-    /// Directory to create for the new collection.
-    name: PathBuf,
+    /// Directory to create for the new collection [default: ./.protoglot].
+    name: Option<PathBuf>,
     /// Overwrite scaffold files if the directory already exists.
     #[arg(long)]
     force: bool,
+    /// Generate the collection from an OpenAPI 3 / Swagger 2 spec (JSON or YAML).
+    #[arg(long, value_name = "SPEC")]
+    from: Option<PathBuf>,
 }
 
 #[derive(Args)]
 struct RunArgs {
-    /// Path to a request file, a folder, or the collection root.
-    path: PathBuf,
+    /// Path to a request file, a folder, or the collection root
+    /// [default: ./.protoglot, else . if it has a protoglot.toml].
+    path: Option<PathBuf>,
     /// Select an environment (environments/<name>.toml).
     #[arg(long)]
     env: Option<String>,
@@ -212,18 +217,35 @@ async fn main() {
     std::process::exit(code);
 }
 
+/// Resolve the collection path: explicit arg wins, then `<base>/.protoglot`,
+/// then `<base>` itself when it holds a `protoglot.toml`.
+fn resolve_collection_path(given: Option<PathBuf>, base: &Path) -> anyhow::Result<PathBuf> {
+    if let Some(p) = given {
+        return Ok(p);
+    }
+    let dot = base.join(".protoglot");
+    if dot.is_dir() {
+        return Ok(dot);
+    }
+    if base.join("protoglot.toml").is_file() {
+        return Ok(base.to_path_buf());
+    }
+    bail!("no path given and no ./.protoglot or ./protoglot.toml here (pass a path, or scaffold one with `protoglot new`)")
+}
+
 /// Returns `true` if any hygiene issue was found.
 fn lint_cmd(args: &LintArgs) -> anyhow::Result<bool> {
+    let path = resolve_collection_path(args.path.clone(), Path::new("."))?;
     let mut total = 0usize;
 
-    let items = format::collect_requests(&args.path)
-        .with_context(|| format!("loading requests from {}", args.path.display()))?;
+    let items = format::collect_requests(&path)
+        .with_context(|| format!("loading requests from {}", path.display()))?;
     for item in &items {
         total += report_findings(&item.path, &lint::lint_request(&item.request));
     }
 
     let mut env_files = Vec::new();
-    find_env_files(&args.path, &mut env_files);
+    find_env_files(&path, &mut env_files);
     env_files.sort();
     for path in &env_files {
         let vars = format::load_environment(path)
@@ -294,12 +316,13 @@ fn codegen_cmd(args: &CodegenArgs) -> anyhow::Result<()> {
 
 /// Returns `true` if any request failed or errored.
 async fn execute_once(args: &RunArgs) -> anyhow::Result<bool> {
-    let mut scope = build_scope(&args.path, &args.env, &args.vars)?;
+    let path = resolve_collection_path(args.path.clone(), Path::new("."))?;
+    let mut scope = build_scope(&path, &args.env, &args.vars)?;
 
-    let items = format::collect_requests(&args.path)
-        .with_context(|| format!("loading requests from {}", args.path.display()))?;
+    let items = format::collect_requests(&path)
+        .with_context(|| format!("loading requests from {}", path.display()))?;
     if items.is_empty() {
-        bail!("no requests found at {}", args.path.display());
+        bail!("no requests found at {}", path.display());
     }
 
     let runner = Runner::with_config(ClientConfig {
@@ -338,11 +361,11 @@ async fn watch_loop(args: &RunArgs) -> anyhow::Result<()> {
 
     let _ = execute_once(args).await; // first run; keep watching even on failure
 
-    let watch_path = if args.path.is_dir() {
-        args.path.clone()
+    let path = resolve_collection_path(args.path.clone(), Path::new("."))?;
+    let watch_path = if path.is_dir() {
+        path
     } else {
-        args.path
-            .parent()
+        path.parent()
             .filter(|p| !p.as_os_str().is_empty())
             .unwrap_or(Path::new("."))
             .to_path_buf()
@@ -457,9 +480,12 @@ fn scaffold_files(name: &str) -> Vec<(PathBuf, String)> {
 }
 
 fn scaffold(args: &NewArgs) -> anyhow::Result<()> {
-    let root = &args.name;
+    let root = args
+        .name
+        .clone()
+        .unwrap_or_else(|| PathBuf::from(".protoglot"));
     if root.exists() {
-        let non_empty = fs::read_dir(root)
+        let non_empty = fs::read_dir(&root)
             .map(|mut d| d.next().is_some())
             .unwrap_or(false);
         if non_empty && !args.force {
@@ -470,12 +496,31 @@ fn scaffold(args: &NewArgs) -> anyhow::Result<()> {
         }
     }
 
+    // A dot-dir like `.protoglot` is a lousy collection name — use the
+    // containing directory's name instead (i.e. the project's).
     let collection_name = root
         .file_name()
         .and_then(|s| s.to_str())
-        .unwrap_or("collection");
+        .filter(|n| !n.starts_with('.'))
+        .map(str::to_string)
+        .or_else(|| {
+            let cwd = std::env::current_dir().ok()?;
+            Some(cwd.file_name()?.to_str()?.to_string())
+        })
+        .unwrap_or_else(|| "collection".to_string());
 
-    for (rel, content) in scaffold_files(collection_name) {
+    let files = match &args.from {
+        Some(spec) => {
+            let spec = locate_spec(spec)?;
+            let text = fs::read_to_string(&spec)
+                .with_context(|| format!("reading spec {}", spec.display()))?;
+            protoglot_core::import::openapi(&text)
+                .with_context(|| format!("importing {}", spec.display()))?
+        }
+        None => scaffold_files(&collection_name),
+    };
+
+    for (rel, content) in files {
         let target = root.join(&rel);
         if let Some(parent) = target.parent() {
             fs::create_dir_all(parent)?;
@@ -485,12 +530,99 @@ fn scaffold(args: &NewArgs) -> anyhow::Result<()> {
         }
         fs::write(&target, content)
             .with_context(|| format!("writing {}", target.display()))?;
-        println!("  created {}", display_rel(root, &target));
+        println!("  created {}", display_rel(&root, &target));
     }
 
     println!("\nScaffolded collection at {}", root.display());
-    println!("Try it:\n  protoglot test {}", root.display());
+    if args.name.is_none() {
+        println!("Try it:\n  protoglot test");
+    } else {
+        println!("Try it:\n  protoglot test {}", root.display());
+    }
+
+    // Scaffolded the sample but an API spec sits somewhere in the tree? Point at it.
+    if args.from.is_none() {
+        let mut found = Vec::new();
+        find_files_named(Path::new("."), SPEC_NAMES, SPEC_SEARCH_DEPTH, &mut found);
+        found.sort();
+        if let Some(c) = found.first() {
+            let target = args
+                .name
+                .as_ref()
+                .map(|n| format!("{} ", n.display()))
+                .unwrap_or_default();
+            println!(
+                "\nfound {} — generate the collection from it instead:\n  protoglot new {target}--force --from {}",
+                c.display(),
+                c.display()
+            );
+        }
+    }
     Ok(())
+}
+
+const SPEC_NAMES: &[&str] = &[
+    "openapi.yaml",
+    "openapi.yml",
+    "openapi.json",
+    "swagger.yaml",
+    "swagger.json",
+];
+const SPEC_SEARCH_DEPTH: usize = 6;
+// Dot-dirs (.git, .protoglot, …) are skipped wholesale in find_files_named.
+const SPEC_SKIP_DIRS: &[&str] = &["node_modules", "target", "dist", "build", "vendor"];
+
+/// Resolve the `--from` argument: an existing path wins; a bare filename that
+/// doesn't exist in cwd is searched for down the tree.
+fn locate_spec(given: &Path) -> anyhow::Result<PathBuf> {
+    if given.exists() {
+        return Ok(given.to_path_buf());
+    }
+    let is_bare_name = given.file_name().map(|f| f == given.as_os_str()).unwrap_or(false);
+    if !is_bare_name {
+        bail!("spec {} not found", given.display());
+    }
+    let name = given.to_str().unwrap_or_default();
+    let mut matches = Vec::new();
+    find_files_named(Path::new("."), &[name], SPEC_SEARCH_DEPTH, &mut matches);
+    matches.sort();
+    match matches.len() {
+        0 => bail!("{name} not found here or anywhere down the tree"),
+        1 => {
+            eprintln!("using {}", matches[0].display());
+            Ok(matches.remove(0))
+        }
+        _ => bail!(
+            "multiple files named {name} found — pass a full path:\n  {}",
+            matches
+                .iter()
+                .map(|p| p.display().to_string())
+                .collect::<Vec<_>>()
+                .join("\n  ")
+        ),
+    }
+}
+
+fn find_files_named(base: &Path, names: &[&str], depth: usize, out: &mut Vec<PathBuf>) {
+    if depth == 0 {
+        return;
+    }
+    let Ok(entries) = fs::read_dir(base) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let p = entry.path();
+        let Some(entry_name) = p.file_name().and_then(|s| s.to_str()) else {
+            continue;
+        };
+        if p.is_dir() {
+            if !SPEC_SKIP_DIRS.contains(&entry_name) && !entry_name.starts_with('.') {
+                find_files_named(&p, names, depth - 1, out);
+            }
+        } else if names.contains(&entry_name) {
+            out.push(p);
+        }
+    }
 }
 
 fn display_rel(root: &Path, target: &Path) -> String {
@@ -528,5 +660,28 @@ mod tests {
                 other => panic!("unexpected scaffold file: {other}"),
             }
         }
+    }
+
+    #[test]
+    fn resolves_default_collection_path() {
+        let base = std::env::temp_dir().join(format!("pglot-resolve-{}", std::process::id()));
+        let dot = base.join(".protoglot");
+        fs::create_dir_all(&dot).unwrap();
+
+        // Explicit path always wins.
+        assert_eq!(
+            resolve_collection_path(Some(PathBuf::from("x")), &base).unwrap(),
+            PathBuf::from("x")
+        );
+        // `.protoglot` dir preferred.
+        assert_eq!(resolve_collection_path(None, &base).unwrap(), dot);
+
+        // Then a `protoglot.toml` in the base itself.
+        fs::remove_dir_all(&dot).unwrap();
+        assert!(resolve_collection_path(None, &base).is_err());
+        fs::write(base.join("protoglot.toml"), "name = \"t\"\n").unwrap();
+        assert_eq!(resolve_collection_path(None, &base).unwrap(), base);
+
+        fs::remove_dir_all(&base).unwrap();
     }
 }

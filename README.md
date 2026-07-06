@@ -100,6 +100,19 @@ protoglot test myapi
 `protoglot new` writes a runnable sample collection; edit it, add your requests,
 point it at your API.
 
+Inside an existing repo, skip the name: `protoglot new` scaffolds `./.protoglot`
+(named after the repo), and bare `protoglot test` / `run` / `lint` find it
+automatically — like `.github` or `.vscode`, the collection lives alongside the
+code it tests.
+
+Got an OpenAPI or Swagger spec? Generate the collection from it — one request
+per operation (grouped by tag), with the documented success status as an
+assertion and `{{path}}` parameters as variables:
+
+```sh
+protoglot new --from openapi.yaml
+```
+
 ## Collections
 
 A collection is a directory of TOML files — one request per file — in whatever
@@ -316,12 +329,16 @@ The exit code is non-zero if any assertion fails, so the build breaks on its own
 ## CLI reference
 
 ```
-protoglot new  <name>                              scaffold a runnable collection
-protoglot run  <path>                              execute a request / folder / collection
-protoglot test <path>                              same, intended for CI
+protoglot new  [name] [--from <spec>]              scaffold a collection (or generate from OpenAPI/Swagger)
+protoglot run  [path]                              execute a request / folder / collection
+protoglot test [path]                              same, intended for CI
 protoglot codegen <file> --as curl|fetch|reqwest   export a request as a snippet
-protoglot lint <path>                              flag hardcoded secrets
+protoglot lint [path]                              flag hardcoded secrets
 ```
+
+`[name]` / `[path]` are optional: `new` defaults to `./.protoglot`, and
+`run`/`test`/`lint` look for `./.protoglot` (then a `./protoglot.toml`) when no
+path is given.
 
 Installs as both `protoglot` and the short alias `pglot` (`pglot test ./api`).
 

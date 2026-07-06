@@ -26,6 +26,9 @@ pub enum Error {
     #[error("script error: {0}")]
     Script(String),
 
+    #[error("import error: {0}")]
+    Import(String),
+
     #[error("io error: {0}")]
     Io(#[from] std::io::Error),
 }

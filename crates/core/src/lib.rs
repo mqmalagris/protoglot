@@ -9,6 +9,7 @@ pub mod codegen;
 pub mod data;
 pub mod environment;
 pub mod error;
+pub mod import;
 pub mod lint;
 pub mod protocols;
 pub mod report;
