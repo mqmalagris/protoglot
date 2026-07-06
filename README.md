@@ -36,7 +36,7 @@ protoglot test myapi     # run it — exits non-zero if anything fails
 | Bruno | ✅ | ✅ | ⚠️ REST/GraphQL | ✅ |
 | **protoglot** | ✅ | ✅ | ✅ (incl. gRPC/SOAP) | ✅ |
 
-> **Status:** early — `v0.1.0`. The protocols, assertions, auth, and CI tooling
+> **Status:** early — `0.1.x`. The protocols, assertions, auth, and CI tooling
 > described below work and are covered by tests; some refinements are still in
 > flight.
 
@@ -112,6 +112,10 @@ assertion and `{{path}}` parameters as variables:
 ```sh
 protoglot new --from openapi.yaml
 ```
+
+A bare filename is searched for down the tree (`docs/api/openapi.yaml` still
+just works); a full path always wins. Both OpenAPI 3 and Swagger 2 are
+accepted, JSON or YAML.
 
 ## Collections
 
